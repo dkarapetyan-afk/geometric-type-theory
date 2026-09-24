@@ -1,0 +1,4 @@
+theory Bad where
+  sort X ;
+  term f (x : X) : X -> X ;
+end

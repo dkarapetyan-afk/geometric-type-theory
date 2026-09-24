@@ -1,0 +1,22 @@
+-- Modules over a host ring. The scalar action is indexed by the external carrier.
+postulate R : U
+postulate rzero : R
+postulate rone : R
+postulate radd : R -> R -> R
+postulate rmul : R -> R -> R
+
+theory Module where
+  sort M ;
+  term zero : M ;
+  term add (u : M, v : M) : M ;
+  term neg (u : M) : M ;
+  term addAssoc (u : M, v : M, w : M) : Id M (add(add(u, v), w)) (add(u, add(v, w))) ;
+  term addComm (u : M, v : M) : Id M (add(u, v)) (add(v, u)) ;
+  term addZero (u : M) : Id M (add(u, zero)) u ;
+  term addNeg (u : M) : Id M (add(u, neg(u))) zero ;
+  term sigma (r : R ; v : M) : M ;
+  term actMul (r : R, s : R ; v : M) : Id M (sigma(r ; sigma(s ; v))) (sigma(rmul(r, s) ; v)) ;
+  term actOne (v : M) : Id M (sigma(rone ; v)) v ;
+  term actAdd (r : R ; u : M, v : M) : Id M (sigma(r ; add(u, v))) (add(sigma(r ; u), sigma(r ; v))) ;
+  term actSum (r : R, s : R ; v : M) : Id M (sigma(radd(r, s) ; v)) (add(sigma(r ; v), sigma(s ; v))) ;
+end

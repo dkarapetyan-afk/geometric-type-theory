@@ -1,0 +1,15 @@
+def Bool : U = Unit + Unit
+
+context (u :: Sort) in
+  check (Nat -> Bool) ^ u type
+  defeq Nat ^ u = Nat
+  defeq Bool ^ u = Unit + Unit
+  not defeq (Nat -> Bool) ^ u = (Nat ^ u) -> (Bool ^ u)
+end
+
+context (m :: Sort) (u :: Sort) in
+  not defeq (Nat -> Nat){m / u} = Nat -> Nat
+  defeq (Nat + Unit){m / u} = Nat + Unit
+  defeq (ty u){m / u} = ty (m ^ u)
+  defeq (ty u){sort Nat / u} = Nat
+end

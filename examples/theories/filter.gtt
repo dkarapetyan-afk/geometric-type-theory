@@ -1,0 +1,16 @@
+-- Prime filters on a host ring. One proposition P(r) for each ring element.
+postulate R : U
+postulate rzero : R
+postulate rone : R
+postulate radd : R -> R -> R
+postulate rmul : R -> R -> R
+
+theory PrimeFilter where
+  sort P(r : R ;) ;
+  term prop (r : R ; x : P(r), y : P(r)) : Id (P(r)) x y ;
+  term oneIn : P(rone) ;
+  term zeroOut (p : P(rzero)) : Empty ;
+  term mulL (r : R, s : R ; p : P(rmul(r, s))) : P(r) * P(s) ;
+  term mulR (r : R, s : R ; p : P(r) * P(s)) : P(rmul(r, s)) ;
+  term addSplit (r : R, s : R ; p : P(radd(r, s))) : Trunc (P(r) + P(s)) ;
+end

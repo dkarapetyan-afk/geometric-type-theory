@@ -1,0 +1,4 @@
+-- The carrier from outside a model extension is not silently in scope.
+context (X :: Sort) (e :: Ax (ty X)) in
+  theory Bad : Theory = Ax (ty X)
+end

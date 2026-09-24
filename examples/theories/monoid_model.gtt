@@ -1,0 +1,129 @@
+-- Booleans under disjunction model the monoid theory, including 0-truncation.
+def Bool : U = Unit + Unit
+def ff : Bool = inl tt
+def ttB : Bool = inr tt
+
+def or : Bool -> Bool -> Bool =
+  \x y. match x as _ return Bool with
+    inl _ => y
+    inr _ => ttB
+  end
+
+def unitL : (x : Bool) -> Id Bool (or x ff) x =
+  \x. match x as z return Id Bool (or z ff) z with
+    inl a => refl (inl a)
+    inr b => refl (inr b)
+  end
+
+def unitR : (x : Bool) -> Id Bool (or ff x) x =
+  \x. refl x
+
+def assoc : (x : Bool) -> (y : Bool) -> (z : Bool) -> Id Bool (or (or x y) z) (or x (or y z)) =
+  \x y z. match x as x1 return Id Bool (or (or x1 y) z) (or x1 (or y z)) with
+    inl _ => refl (or y z)
+    inr _ => refl ttB
+  end
+
+-- Boolean equality is a proposition, by encode/decode into a code family.
+def code : Bool -> Bool -> U =
+  \x y. match x as _ return U with
+    inl _ => match y as _ return U with
+      inl _ => Unit
+      inr _ => Empty
+    end
+    inr _ => match y as _ return U with
+      inl _ => Empty
+      inr _ => Unit
+    end
+  end
+
+def rcode : (x : Bool) -> code x x =
+  \x. match x as z return code z z with
+    inl _ => tt
+    inr _ => tt
+  end
+
+def encode : (x : Bool) -> (y : Bool) -> (p : Id Bool x y) -> code x y =
+  \x y p. j p as y2 p2 return code x y2
+    refl => rcode x
+  end
+
+def decode : (x : Bool) -> (y : Bool) -> (c : code x y) -> Id Bool x y =
+  \x. match x as x0 return ((y : Bool) -> (c : code x0 y) -> Id Bool x0 y) with
+    inl _ => \y. match y as y0 return ((c : code ff y0) -> Id Bool ff y0) with
+      inl _ => \_c. refl ff
+      inr _ => \c. abort c
+    end
+    inr _ => \y. match y as y0 return ((c : code ttB y0) -> Id Bool ttB y0) with
+      inl _ => \c. abort c
+      inr _ => \_c. refl ttB
+    end
+  end
+
+def sym : (A : U) -> (x : A) -> (y : A) -> (p : Id A x y) -> Id A y x =
+  \A x y p. j p as y2 p2 return Id A y2 x
+    refl => refl x
+  end
+
+def trans : (A : U) -> (x : A) -> (y : A) -> (z : A) -> (p : Id A x y) -> (q : Id A y z) -> Id A x z =
+  \A x y z p q. (j p as y2 p2 return ((q : Id A y2 z) -> Id A x z)
+    refl => \q0. q0
+  end) q
+
+def cong : (A : U) -> (B : U) -> (f : A -> B) -> (x : A) -> (y : A) -> (p : Id A x y) -> Id B (f x) (f y) =
+  \A B f x y p. j p as y2 p2 return Id B (f x) (f y2)
+    refl => refl (f x)
+  end
+
+def decodeEncode : (x : Bool) -> (y : Bool) -> (p : Id Bool x y) -> Id (Id Bool x y) (decode x y (encode x y p)) p =
+  \x y p. j p as y2 p2 return Id (Id Bool x y2) (decode x y2 (encode x y2 p2)) p2
+    refl => match x as x1 return Id (Id Bool x1 x1) (decode x1 x1 (encode x1 x1 (refl x1))) (refl x1) with
+      inl _ => refl (refl ff)
+      inr _ => refl (refl ttB)
+    end
+  end
+
+def codeProp : (x : Bool) -> (y : Bool) -> (c : code x y) -> (d : code x y) -> Id (code x y) c d =
+  \x. match x as x0 return ((y : Bool) -> (c : code x0 y) -> (d : code x0 y) -> Id (code x0 y) c d) with
+    inl _ => \y. match y as y0 return ((c : code ff y0) -> (d : code ff y0) -> Id (code ff y0) c d) with
+      inl _ => \c d. refl c
+      inr _ => \c d. abort c
+    end
+    inr _ => \y. match y as y0 return ((c : code ttB y0) -> (d : code ttB y0) -> Id (code ttB y0) c d) with
+      inl _ => \c d. abort c
+      inr _ => \c d. refl c
+    end
+  end
+
+def issetBool : (x : Bool) -> (y : Bool) -> (p : Id Bool x y) -> (q : Id Bool x y) -> Id (Id Bool x y) p q =
+  \x y p q. trans (Id Bool x y)
+    p
+    (decode x y (encode x y p))
+    q
+    (sym (Id Bool x y) (decode x y (encode x y p)) p (decodeEncode x y p))
+    (trans (Id Bool x y)
+      (decode x y (encode x y p))
+      (decode x y (encode x y q))
+      q
+      (cong (code x y) (Id Bool x y) (\c. decode x y c) (encode x y p) (encode x y q) (codeProp x y (encode x y p) (encode x y q)))
+      (decodeEncode x y q))
+
+theory Monoid where
+  sort X ;
+  term e : X ;
+  term mul (x : X, y : X) : X ;
+  term unitL (x : X) : Id X (mul(x, e)) x ;
+  term unitR (x : X) : Id X (mul(e, x)) x ;
+  term assoc (x : X, y : X, z : X) : Id X (mul(mul(x, y), z)) (mul(x, mul(y, z))) ;
+  term isset (x : X, y : X, p : Id X x y, q : Id X x y) : Id (Id X x y) p q ;
+end
+
+model boolOr :: Monoid where
+  X = Bool ;
+  e = ff ;
+  mul = \x y. or x y ;
+  unitL = unitL ;
+  unitR = unitR ;
+  assoc = assoc ;
+  isset = issetBool ;
+end

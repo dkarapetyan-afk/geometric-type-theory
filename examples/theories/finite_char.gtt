@@ -1,0 +1,10 @@
+-- A ring of some finite characteristic: an external natural, unwrapped with Ax,
+-- such that that multiple of 1 is zero.
+theory FiniteChar where
+  sort R ;
+  term zero : R ;
+  term one : R ;
+  term add (x : R, y : R) : R ;
+  term c : Ax Nat ;
+  term p : let ax n := c in Id R (nind n as k return R zero => zero succ m ih => add(one, ih) end) zero ;
+end

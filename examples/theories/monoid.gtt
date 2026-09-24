@@ -1,0 +1,10 @@
+-- The theory of a monoid, with the carrier required to be a 0-type.
+theory Monoid where
+  sort X ;
+  term e : X ;
+  term mul (x : X, y : X) : X ;
+  term unitL (x : X) : Id X (mul(x, e)) x ;
+  term unitR (x : X) : Id X (mul(e, x)) x ;
+  term assoc (x : X, y : X, z : X) : Id X (mul(mul(x, y), z)) (mul(x, mul(y, z))) ;
+  term isset (x : X, y : X, p : Id X x y, q : Id X x y) : Id (Id X x y) p q ;
+end

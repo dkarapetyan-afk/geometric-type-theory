@@ -1,0 +1,12 @@
+-- Geometric signature of a Mixtral block. The executable model, including the
+-- top-2 router and the load-balancing adjoint, is the compiler in src/mixtral.rs.
+theory Mixtral where
+  sort Hidden ;
+  sort Score ;
+  term embed (token : Ax Nat) : Hidden ;
+  term norm (x : Hidden) : Hidden ;
+  term attend (x : Hidden) : Hidden ;
+  term gate (x : Hidden) : Score ;
+  term expert (x : Hidden) : Hidden ;
+  term mix (x : Hidden, routed : Hidden) : Hidden ;
+end

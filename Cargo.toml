@@ -1,0 +1,10 @@
+[package]
+name = "gtt"
+version = "0.1.0"
+edition = "2021"
+description = "A kernel for geometric type theory, in the two styles of Riley 2026"
+license = "MIT"
+
+[[bin]]
+name = "gtt"
+path = "src/main.rs"

@@ -1,0 +1,20 @@
+-- A ring, plus the external schema "not of characteristic n + 1" for every
+-- natural number. Scalar multiplication by n is external induction on Nat.
+theory CharZero where
+  sort R ;
+  term zero : R ;
+  term one : R ;
+  term add (x : R, y : R) : R ;
+  term mul (x : R, y : R) : R ;
+  term neg (x : R) : R ;
+  term addAssoc (x : R, y : R, z : R) : Id R (add(add(x, y), z)) (add(x, add(y, z))) ;
+  term addComm (x : R, y : R) : Id R (add(x, y)) (add(y, x)) ;
+  term addZero (x : R) : Id R (add(x, zero)) x ;
+  term addNeg (x : R) : Id R (add(x, neg(x))) zero ;
+  term mulAssoc (x : R, y : R, z : R) : Id R (mul(mul(x, y), z)) (mul(x, mul(y, z))) ;
+  term mulOne (x : R) : Id R (mul(x, one)) x ;
+  term mulOneL (x : R) : Id R (mul(one, x)) x ;
+  term dist (x : R, y : R, z : R) : Id R (mul(x, add(y, z))) (add(mul(x, y), mul(x, z))) ;
+  term distL (x : R, y : R, z : R) : Id R (mul(add(x, y), z)) (add(mul(x, z), mul(y, z))) ;
+  term char (n : Nat ; p : Id R (nind n as k return R zero => zero succ m ih => add(one, ih) end) zero) : Empty ;
+end

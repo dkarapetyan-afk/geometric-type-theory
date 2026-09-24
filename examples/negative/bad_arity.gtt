@@ -1,0 +1,6 @@
+postulate R : U
+
+theory T where
+  sort P(r : R ;) ;
+  term bad : P() ;
+end

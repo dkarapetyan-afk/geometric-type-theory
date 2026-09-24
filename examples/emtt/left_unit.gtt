@@ -1,0 +1,10 @@
+-- Left unit for the multiplication, with every model weakening written out.
+context
+  (X :: Sort)
+  (e :: Ax (ty X))
+  (m :: (x : ty (X ^ e)) |> (y : ty (X ^ e)) |> Ax (ty (X ^ e)))
+in
+  theory LeftUnit : Theory =
+    (x : ty (X ^ e ^ m)) |>
+      Ax (Id (ty (X ^ e ^ m)) (unax (m x (unax (e ^ m)))) x)
+end

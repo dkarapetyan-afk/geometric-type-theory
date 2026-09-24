@@ -1,0 +1,2 @@
+-- The theory of an object, in the empty context.
+theory Object : Theory = Sort

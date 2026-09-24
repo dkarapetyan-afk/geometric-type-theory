@@ -1,0 +1,7 @@
+-- A pointed object: a sort, and an element of its carrier.
+theory Pointed : Theory = (X :: Sort) * Ax (ty X)
+
+model natPoint :: Pointed = (sort Nat, ax zero)
+
+check unax (pr2 natPoint) : Nat
+defeq unax (pr2 natPoint) = zero : Nat

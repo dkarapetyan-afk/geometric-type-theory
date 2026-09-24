@@ -1,0 +1,6 @@
+-- A binary operation on the carrier, in the context of a pointed sort.
+-- Crossing the model binder `e` is written explicitly.
+context (X :: Sort) (e :: Ax (ty X)) in
+  theory Mul : Theory =
+    (x : ty (X ^ e)) |> (y : ty (X ^ e)) |> Ax (ty (X ^ e))
+end

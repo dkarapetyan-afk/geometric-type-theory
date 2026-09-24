@@ -1,0 +1,6 @@
+context (u :: Sort) in
+  -- The variable rule: u models Sort pulled back along itself, which is Sort.
+  check u :: Sort
+  defeq Sort ^ u = Sort
+  check ty u type
+end

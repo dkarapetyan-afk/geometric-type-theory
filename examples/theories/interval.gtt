@@ -1,0 +1,16 @@
+-- The theory of a strict interval. Its classifying topos is simplicial sets.
+-- Disjunction is the propositional truncation of a coproduct.
+theory Interval where
+  sort I ;
+  sort le (x : I, y : I) ;
+  term b : I ;
+  term t : I ;
+  term reflLe (x : I) : le(x, x) ;
+  term trans (x : I, y : I, z : I, p : le(x, y), q : le(y, z)) : le(x, z) ;
+  term antisym (x : I, y : I, p : le(x, y), q : le(y, x)) : Id I x y ;
+  term belowTop (x : I) : le(x, t) ;
+  term aboveBot (x : I) : le(b, x) ;
+  term apart (p : Id I b t) : Empty ;
+  term total (x : I, y : I) : Trunc (le(x, y) + le(y, x)) ;
+  term leProp (x : I, y : I, p : le(x, y), q : le(x, y)) : Id (le(x, y)) p q ;
+end
