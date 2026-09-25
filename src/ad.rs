@@ -305,14 +305,29 @@ impl Graph {
     }
 
     pub fn backward(&mut self, loss: usize) {
+        assert_eq!(self.nodes[loss].value.len(), 1, "loss is a scalar");
+        self.backward_cotangent(loss, &[1.0]);
+    }
+
+    /// Seed `id` with an upstream cotangent and sweep the tape.
+    /// Parameter updates read the resulting leaf gradients.
+    pub fn backward_cotangent(&mut self, id: usize, cot: &[f32]) {
+        assert_eq!(cot.len(), self.nodes[id].value.len(), "cotangent width");
         for n in &mut self.nodes {
             n.grad = vec![0.0; n.value.len()];
         }
-        assert_eq!(self.nodes[loss].value.len(), 1, "loss is a scalar");
-        self.nodes[loss].grad[0] = 1.0;
+        self.nodes[id].grad.copy_from_slice(cot);
         for i in (0..self.nodes.len()).rev() {
             self.back_one(i);
         }
+    }
+
+    /// Bytes of values and gradients currently held on the tape.
+    pub fn bytes(&self) -> u64 {
+        self.nodes
+            .iter()
+            .map(|n| (n.value.len() + n.grad.len()) as u64 * 4)
+            .sum()
     }
 
     fn push(&mut self, shape: Vec<usize>, value: Vec<f32>, op: Op) -> usize {

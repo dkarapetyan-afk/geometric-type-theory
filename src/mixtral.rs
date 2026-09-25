@@ -87,7 +87,7 @@ impl Config {
         }
     }
 
-    fn head_dim(&self) -> usize {
+    pub(crate) fn head_dim(&self) -> usize {
         assert!(self.dim % self.n_heads == 0, "dim divides into heads");
         self.dim / self.n_heads
     }
@@ -104,32 +104,32 @@ enum Init {
     Ones,
 }
 
-struct Slot {
-    name: String,
-    shape: Vec<usize>,
+pub(crate) struct Slot {
+    pub(crate) name: String,
+    pub(crate) shape: Vec<usize>,
     init: Init,
 }
 
-struct LayerSpec {
-    attn_norm: usize,
-    wq: usize,
-    wk: usize,
-    wv: usize,
-    wo: usize,
-    ffn_norm: usize,
-    gate: usize,
-    experts: Vec<[usize; 3]>,
+pub(crate) struct LayerSpec {
+    pub(crate) attn_norm: usize,
+    pub(crate) wq: usize,
+    pub(crate) wk: usize,
+    pub(crate) wv: usize,
+    pub(crate) wo: usize,
+    pub(crate) ffn_norm: usize,
+    pub(crate) gate: usize,
+    pub(crate) experts: Vec<[usize; 3]>,
 }
 
-struct Arch {
-    embed: usize,
-    layers: Vec<LayerSpec>,
-    norm: usize,
-    head: usize,
-    slots: Vec<Slot>,
+pub(crate) struct Arch {
+    pub(crate) embed: usize,
+    pub(crate) layers: Vec<LayerSpec>,
+    pub(crate) norm: usize,
+    pub(crate) head: usize,
+    pub(crate) slots: Vec<Slot>,
 }
 
-fn arch(cfg: &Config) -> Arch {
+pub(crate) fn arch(cfg: &Config) -> Arch {
     let mut slots = Vec::new();
     let mut add = |name: String, shape: Vec<usize>, init: Init| {
         let id = slots.len();
@@ -192,21 +192,27 @@ pub fn active_parameter_count(cfg: &Config) -> u64 {
     total - expert + active_expert
 }
 
-fn init_params(cfg: &Config, seed: u64) -> Vec<f32> {
+pub(crate) fn each_init(cfg: &Config, seed: u64, mut f: impl FnMut(usize, &[f32])) {
     let spec = arch(cfg);
     let mut rng = Rng(seed);
-    let mut out = Vec::new();
-    for s in &spec.slots {
+    for (i, s) in spec.slots.iter().enumerate() {
         let n: usize = s.shape.iter().product();
+        let mut v = Vec::with_capacity(n);
         match s.init {
             Init::Normal => {
                 for _ in 0..n {
-                    out.push(rng.normal() * cfg.init_std);
+                    v.push(rng.normal() * cfg.init_std);
                 }
             }
-            Init::Ones => out.extend(std::iter::repeat(1.0).take(n)),
+            Init::Ones => v.resize(n, 1.0),
         }
+        f(i, &v);
     }
+}
+
+fn init_params(cfg: &Config, seed: u64) -> Vec<f32> {
+    let mut out = Vec::new();
+    each_init(cfg, seed, |_, v| out.extend_from_slice(v));
     out
 }
 
@@ -251,7 +257,7 @@ pub fn sample_batch(cfg: &Config, batch: usize, seq: usize, seed: u64) -> Batch 
     Batch { tokens, batch, seq }
 }
 
-fn swiglu(g: &mut Graph, x: usize, w1: usize, w3: usize, w2: usize) -> usize {
+pub(crate) fn swiglu(g: &mut Graph, x: usize, w1: usize, w3: usize, w2: usize) -> usize {
     let gate = g.matmul(x, w1);
     let gate = g.silu(gate);
     let up = g.matmul(x, w3);
@@ -259,17 +265,23 @@ fn swiglu(g: &mut Graph, x: usize, w1: usize, w3: usize, w2: usize) -> usize {
     g.matmul(hidden, w2)
 }
 
-fn attention(cfg: &Config, b: &mut Bound, layer: &LayerSpec, x: usize, seq: usize) -> usize {
-    let g = &mut b.g;
-    let n = &b.nodes;
+pub(crate) struct AttnW {
+    pub(crate) norm: usize,
+    pub(crate) q: usize,
+    pub(crate) k: usize,
+    pub(crate) v: usize,
+    pub(crate) o: usize,
+}
+
+pub(crate) fn attention(cfg: &Config, g: &mut Graph, w: AttnW, x: usize, seq: usize) -> usize {
     let hd = cfg.head_dim();
-    let h = g.rmsnorm(x, n[layer.attn_norm], cfg.rms_norm_eps);
+    let h = g.rmsnorm(x, w.norm, cfg.rms_norm_eps);
     let batch = g.shape(h)[0];
-    let q = g.matmul(h, n[layer.wq]);
+    let q = g.matmul(h, w.q);
     let q = g.reshape(q, &[batch, seq, cfg.n_heads, hd]);
-    let k = g.matmul(h, n[layer.wk]);
+    let k = g.matmul(h, w.k);
     let k = g.reshape(k, &[batch, seq, cfg.n_kv_heads, hd]);
-    let v = g.matmul(h, n[layer.wv]);
+    let v = g.matmul(h, w.v);
     let v = g.reshape(v, &[batch, seq, cfg.n_kv_heads, hd]);
     let q = g.rope(q, 1, cfg.rope_theta);
     let k = g.rope(k, 1, cfg.rope_theta);
@@ -287,11 +299,11 @@ fn attention(cfg: &Config, b: &mut Bound, layer: &LayerSpec, x: usize, seq: usiz
     let ctx = g.matmul(probs, v);
     let ctx = g.permute(ctx, &[0, 2, 1, 3]);
     let flat = g.reshape(ctx, &[batch, seq, cfg.n_heads * hd]);
-    let proj = g.matmul(flat, n[layer.wo]);
+    let proj = g.matmul(flat, w.o);
     g.add(x, proj)
 }
 
-fn topk_mask(probs: &[f32], n: usize, experts: usize, k: usize) -> (Vec<f32>, Vec<u32>) {
+pub(crate) fn topk_mask(probs: &[f32], n: usize, experts: usize, k: usize) -> (Vec<f32>, Vec<u32>) {
     let mut mask = vec![0f32; n * experts];
     let mut counts = vec![0u32; experts];
     for row in 0..n {
@@ -309,31 +321,58 @@ fn topk_mask(probs: &[f32], n: usize, experts: usize, k: usize) -> (Vec<f32>, Ve
     (mask, counts)
 }
 
-fn moe(cfg: &Config, b: &mut Bound, layer: &LayerSpec, x: usize) -> (usize, usize, Vec<u32>) {
-    let batch = b.g.shape(x)[0];
-    let seq = b.g.shape(x)[1];
+pub(crate) struct Router {
+    pub flat: usize,
+    pub probs: usize,
+    pub weights: usize,
+    pub counts: Vec<u32>,
+}
+
+pub(crate) fn router(cfg: &Config, g: &mut Graph, norm: usize, gate: usize, x: usize) -> Router {
+    let batch = g.shape(x)[0];
+    let seq = g.shape(x)[1];
     let ntok = batch * seq;
-    let h = b.g.rmsnorm(x, b.nodes[layer.ffn_norm], cfg.rms_norm_eps);
-    let flat = b.g.reshape(h, &[ntok, cfg.dim]);
-    let logits = b.g.matmul(flat, b.nodes[layer.gate]);
-    let probs = b.g.softmax_last(logits);
-    let (mask, counts) = topk_mask(b.g.value(probs), ntok, cfg.n_experts, cfg.top_k);
-    let mask_id = b.g.leaf(&[ntok, cfg.n_experts], mask);
-    let masked = b.g.mul(probs, mask_id);
-    let denom = b.g.sum_last(masked);
-    let weights = b.g.div(masked, denom);
-    let mut acc = b.g.leaf(&[ntok, cfg.dim], vec![0.0; ntok * cfg.dim]);
-    for (e, ws) in layer.experts.iter().enumerate() {
-        if counts[e] == 0 {
+    let h = g.rmsnorm(x, norm, cfg.rms_norm_eps);
+    let flat = g.reshape(h, &[ntok, cfg.dim]);
+    let logits = g.matmul(flat, gate);
+    let probs = g.softmax_last(logits);
+    let (mask, counts) = topk_mask(g.value(probs), ntok, cfg.n_experts, cfg.top_k);
+    let mask_id = g.leaf(&[ntok, cfg.n_experts], mask);
+    let masked = g.mul(probs, mask_id);
+    let denom = g.sum_last(masked);
+    let weights = g.div(masked, denom);
+    Router {
+        flat,
+        probs,
+        weights,
+        counts,
+    }
+}
+
+pub(crate) fn moe(
+    cfg: &Config,
+    g: &mut Graph,
+    norm: usize,
+    gate: usize,
+    experts: &[[usize; 3]],
+    x: usize,
+) -> (usize, usize, Vec<u32>) {
+    let batch = g.shape(x)[0];
+    let seq = g.shape(x)[1];
+    let ntok = batch * seq;
+    let route = router(cfg, g, norm, gate, x);
+    let mut acc = g.leaf(&[ntok, cfg.dim], vec![0.0; ntok * cfg.dim]);
+    for (e, ws) in experts.iter().enumerate() {
+        if route.counts[e] == 0 {
             continue;
         }
-        let hidden = swiglu(&mut b.g, flat, b.nodes[ws[0]], b.nodes[ws[1]], b.nodes[ws[2]]);
-        let column = b.g.slice(weights, 1, e, 1);
-        let scaled = b.g.mul(hidden, column);
-        acc = b.g.add(acc, scaled);
+        let hidden = swiglu(g, route.flat, ws[0], ws[1], ws[2]);
+        let column = g.slice(route.weights, 1, e, 1);
+        let scaled = g.mul(hidden, column);
+        acc = g.add(acc, scaled);
     }
-    let y = b.g.reshape(acc, &[batch, seq, cfg.dim]);
-    (b.g.add(x, y), probs, counts)
+    let y = g.reshape(acc, &[batch, seq, cfg.dim]);
+    (g.add(x, y), route.probs, route.counts)
 }
 
 fn forward(cfg: &Config, arch: &Arch, params: &[f32], batch: &Batch) -> (Graph, Vec<usize>, usize, Vec<Vec<u32>>) {
@@ -342,8 +381,18 @@ fn forward(cfg: &Config, arch: &Arch, params: &[f32], batch: &Batch) -> (Graph, 
     let mut probs = Vec::new();
     let mut counts = Vec::new();
     for layer in &arch.layers {
-        x = attention(cfg, &mut b, layer, x, batch.seq);
-        let (y, p, c) = moe(cfg, &mut b, layer, x);
+        let aw = AttnW {
+            norm: b.nodes[layer.attn_norm],
+            q: b.nodes[layer.wq],
+            k: b.nodes[layer.wk],
+            v: b.nodes[layer.wv],
+            o: b.nodes[layer.wo],
+        };
+        x = attention(cfg, &mut b.g, aw, x, batch.seq);
+        let experts: Vec<[usize; 3]> = layer.experts.iter().map(|e| [b.nodes[e[0]], b.nodes[e[1]], b.nodes[e[2]]]).collect();
+        let norm = b.nodes[layer.ffn_norm];
+        let gate = b.nodes[layer.gate];
+        let (y, p, c) = moe(cfg, &mut b.g, norm, gate, &experts, x);
         x = y;
         probs.push(p);
         counts.push(c);
@@ -410,7 +459,7 @@ fn grad_norm(g: &[f32]) -> f32 {
     g.iter().map(|x| x * x).sum::<f32>().sqrt()
 }
 
-fn sgd(params: &mut [f32], grads: &[f32], lr: f32) {
+pub(crate) fn sgd(params: &mut [f32], grads: &[f32], lr: f32) {
     for (p, g) in params.iter_mut().zip(grads) {
         *p -= lr * g;
     }
@@ -427,6 +476,11 @@ pub struct CompileReport {
     pub sparse_loss: f32,
     pub unused_expert_grad: f32,
     pub used_expert_grad: f32,
+    pub full_model_stages: usize,
+    pub full_model_peak: u64,
+    pub full_model_budget: u64,
+    pub full_model_code_peak: u64,
+    pub full_model_code_budget: u64,
 }
 
 /// Finite-difference check, then one SGD step, on the Mixtral block.
@@ -509,6 +563,11 @@ pub fn compile_mixtral() -> CompileReport {
     assert!(saw_used, "a routed expert should receive tokens");
     assert!(saw_unused, "top-2 of 8 should leave an expert idle on this batch");
     let _ = grad_norm(&base.grads);
+    let budget = crate::stage::Memory {
+        code_bytes: 1 << 20,
+        buffer_bytes: 8 << 30,
+    };
+    let plan = crate::stage::schedule(&paper, 1, 512, budget).expect("8 GiB schedule");
 
     CompileReport {
         paper_parameters: parameter_count(&paper),
@@ -521,5 +580,10 @@ pub fn compile_mixtral() -> CompileReport {
         sparse_loss: sparse_eval.loss,
         unused_expert_grad: unused,
         used_expert_grad: used,
+        full_model_stages: plan.stages.len(),
+        full_model_peak: plan.peak_bytes,
+        full_model_budget: plan.budget,
+        full_model_code_peak: plan.peak_code_bytes,
+        full_model_code_budget: plan.code_budget,
     }
 }

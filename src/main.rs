@@ -58,6 +58,10 @@ fn compile() -> ExitCode {
         "sparse loss {:.6}, idle expert grad {}, routed expert grad {}",
         report.sparse_loss, report.unused_expert_grad, report.used_expert_grad
     );
+    println!(
+        "8 GiB buffers, 1 MiB code: {} stages, buffer peak {} bytes, code peak {} bytes",
+        report.full_model_stages, report.full_model_peak, report.full_model_code_peak
+    );
     let path = "examples/mixtral/kernels.cu";
     if let Err(e) = fs::write(path, kernel_source()) {
         eprintln!("{path}: {e}");
