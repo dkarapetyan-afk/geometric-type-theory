@@ -397,12 +397,11 @@ impl<'a> Parser<'a> {
         let saved = self.i;
         self.i += 1;
         self.skip();
-        let ok = self.peek_ident().is_some()
-            && {
-                let _ = self.ident();
-                self.skip();
-                self.starts(":")
-            };
+        let ok = self.peek_ident().is_some() && {
+            let _ = self.ident();
+            self.skip();
+            self.starts(":")
+        };
         self.i = saved;
         ok
     }
@@ -578,9 +577,28 @@ impl<'a> Parser<'a> {
     fn keyword_stops_app(&mut self) -> bool {
         self.skip();
         const STOP: &[&str] = &[
-            "end", "with", "inl", "inr", "zero", "succ", "refl", "in", "where", "as", "return",
-            ":", "model",
-            "theory", "context", "check", "defeq", "postulate", "def", "not", "sort", "term",
+            "end",
+            "with",
+            "inl",
+            "inr",
+            "zero",
+            "succ",
+            "refl",
+            "in",
+            "where",
+            "as",
+            "return",
+            ":",
+            "model",
+            "theory",
+            "context",
+            "check",
+            "defeq",
+            "postulate",
+            "def",
+            "not",
+            "sort",
+            "term",
             "type",
         ];
         for s in STOP {
@@ -596,10 +614,7 @@ impl<'a> Parser<'a> {
 
     fn can_start_atom(&mut self) -> bool {
         self.skip();
-        matches!(
-            self.peek_char(),
-            Some('(' | '\\' | 'λ' | '★')
-        ) || self.peek_ident().is_some()
+        matches!(self.peek_char(), Some('(' | '\\' | 'λ' | '★')) || self.peek_ident().is_some()
     }
 
     fn post(&mut self) -> Result<E, Error> {

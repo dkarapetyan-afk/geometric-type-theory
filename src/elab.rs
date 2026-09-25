@@ -101,7 +101,12 @@ impl Ctx {
                 self.theories.insert(name.clone(), TVal::Record(rec));
                 Ok(())
             }
-            Item::ModelB { name, thy, body, sp } => {
+            Item::ModelB {
+                name,
+                thy,
+                body,
+                sp,
+            } => {
                 let tval = self
                     .theories
                     .get(thy)
@@ -111,7 +116,12 @@ impl Ctx {
                 self.models.insert(name.clone(), (val, tval));
                 Ok(())
             }
-            Item::ModelA { name, thy, fields, sp } => {
+            Item::ModelA {
+                name,
+                thy,
+                fields,
+                sp,
+            } => {
                 let tval = self
                     .theories
                     .get(thy)
@@ -213,7 +223,10 @@ impl Ctx {
                 );
             }
             if eq && negate {
-                return self.fail(sp, format!("definitionally equal\n  {}", self.nbe.pp_h(&va)));
+                return self.fail(
+                    sp,
+                    format!("definitionally equal\n  {}", self.nbe.pp_h(&va)),
+                );
             }
             return Ok(());
         } else {
@@ -231,7 +244,10 @@ impl Ctx {
                 );
             }
             if eq && negate {
-                return self.fail(sp, format!("definitionally equal\n  {}", self.nbe.pp_t(&va)));
+                return self.fail(
+                    sp,
+                    format!("definitionally equal\n  {}", self.nbe.pp_t(&va)),
+                );
             }
             return Ok(());
         };
@@ -279,10 +295,7 @@ impl Ctx {
         };
         for b in self.binders.iter().skip(i + 1) {
             if let Kind::Model(_) = b.kind {
-                return self.fail(
-                    sp,
-                    format!("weaken past model `{}` as well", b.name),
-                );
+                return self.fail(sp, format!("weaken past model `{}` as well", b.name));
             }
         }
         Ok(lvl)
@@ -321,7 +334,8 @@ impl Ctx {
                         if let Some(m) = blocked {
                             self.fail(sp, format!("weaken `{name}` past model `{m}`"))
                         } else {
-                            let transported = weaken_theory(&self.nbe, &self.env, thy.clone(), b.lvl);
+                            let transported =
+                                weaken_theory(&self.nbe, &self.env, thy.clone(), b.lvl);
                             Ok((b.lvl, transported))
                         }
                     }
@@ -341,10 +355,7 @@ impl Ctx {
         let tm = self.elab_type_tm(e)?;
         let val = self.nbe.eval_h(&tm, &self.env);
         if !self.nbe.is_type(&val) {
-            return self.fail(
-                e.sp,
-                format!("expected a type\n  {}", self.nbe.pp_h(&val)),
-            );
+            return self.fail(e.sp, format!("expected a type\n  {}", self.nbe.pp_h(&val)));
         }
         Ok((tm, val))
     }
@@ -417,9 +428,7 @@ impl Ctx {
                 let mt = self.elab_model_tm(m)?;
                 Ok(HTm::Ty(Box::new(mt)))
             }
-            Ek::Un(UnOp::Trunc, _) => {
-                self.fail(e.sp, "Trunc is a construction, not a host type")
-            }
+            Ek::Un(UnOp::Trunc, _) => self.fail(e.sp, "Trunc is a construction, not a host type"),
             Ek::Name(n) => {
                 let (lvl, ty) = self.lookup_term(n, e.sp)?;
                 if !self.nbe.eq_ty(ty, HVal::U) && !matches!(self.env.get(lvl), Some(Slot::H(_))) {
@@ -469,10 +478,9 @@ impl Ctx {
                     {
                         Ok(tm)
                     }
-                    Ok((_, val, _)) => self.fail(
-                        e.sp,
-                        format!("expected a type\n  {}", self.nbe.pp_h(&val)),
-                    ),
+                    Ok((_, val, _)) => {
+                        self.fail(e.sp, format!("expected a type\n  {}", self.nbe.pp_h(&val)))
+                    }
                     Err(err) => Err(err),
                 }
             }
@@ -562,10 +570,7 @@ impl Ctx {
             Ek::Un(UnOp::Unax, m) => {
                 let (mt, mv, thy) = self.elab_model_infer(m)?;
                 let TVal::Ax(a) = thy else {
-                    return self.fail(
-                        e.sp,
-                        format!("unax expects Ax\n  {}", self.nbe.pp_t(&thy)),
-                    );
+                    return self.fail(e.sp, format!("unax expects Ax\n  {}", self.nbe.pp_t(&thy)));
                 };
                 let tm = HTm::Unax(Box::new(mt));
                 let val = self.nbe.eval_h(&tm, &self.env);
@@ -726,7 +731,11 @@ impl Ctx {
                 self.push_term(
                     p,
                     pb,
-                    HVal::Id(a_ty.clone(), aa.clone(), Box::new(self.neu(yb, (*a_ty).clone()))),
+                    HVal::Id(
+                        a_ty.clone(),
+                        aa.clone(),
+                        Box::new(self.neu(yb, (*a_ty).clone())),
+                    ),
                 );
                 let mot_tm = self.elab_type_tm(motive);
                 self.pop();
@@ -1134,10 +1143,7 @@ impl Ctx {
             }
             Ek::Un(UnOp::AxM, a) => {
                 let TVal::Ax(ty) = expected else {
-                    return self.fail(
-                        e.sp,
-                        format!("ax is not Ax\n  {}", self.nbe.pp_t(expected)),
-                    );
+                    return self.fail(e.sp, format!("ax is not Ax\n  {}", self.nbe.pp_t(expected)));
                 };
                 let (at, _) = self.elab_term_check(a, ty)?;
                 let tm = MTm::Ax(Box::new(at));
@@ -1319,9 +1325,7 @@ impl Ctx {
                 Box::new(self.elab_con_type(a, fields, phi)?),
                 Box::new(self.elab_con_type(b, fields, phi)?),
             )),
-            Ek::Un(UnOp::Trunc, a) => {
-                Ok(Con::Trunc(Box::new(self.elab_con_type(a, fields, phi)?)))
-            }
+            Ek::Un(UnOp::Trunc, a) => Ok(Con::Trunc(Box::new(self.elab_con_type(a, fields, phi)?))),
             Ek::Un(UnOp::AxTy, a) => Ok(Con::Ax(Box::new(self.elab_type_tm(a)?))),
             Ek::Prod {
                 binder,
@@ -1439,7 +1443,10 @@ impl Ctx {
             // Arguments were stored in the con vector by the parser.
             (con_e.to_vec(), Vec::new())
         } else {
-            return self.fail(sp, "this field needs both host and construction arguments; use ';'");
+            return self.fail(
+                sp,
+                "this field needs both host and construction arguments; use ';'",
+            );
         };
         if host_e.len() != field.delta.len() || con_e.len() != field.phi.len() {
             return self.fail(
@@ -1684,7 +1691,11 @@ fn quote_type_var(ty: &HVal) -> HTm {
 fn subst_con(c: &Con, phi: &BTreeMap<u32, Con>, host: &BTreeMap<u32, HTm>) -> Con {
     match c {
         Con::Var(l) => phi.get(l).cloned().unwrap_or_else(|| Con::Var(*l)),
-        Con::Field { idx, host: hs, args } => Con::Field {
+        Con::Field {
+            idx,
+            host: hs,
+            args,
+        } => Con::Field {
             idx: *idx,
             host: hs.iter().map(|h| subst_h(h, host)).collect(),
             args: args.iter().map(|a| subst_con(a, phi, host)).collect(),
@@ -1722,7 +1733,11 @@ fn subst_con(c: &Con, phi: &BTreeMap<u32, Con>, host: &BTreeMap<u32, HTm>) -> Co
         Con::TIn(a) => Con::TIn(Box::new(subst_con(a, phi, host))),
         Con::Ax(a) => Con::Ax(Box::new(subst_h(a, host))),
         Con::AxIn(a) => Con::AxIn(Box::new(subst_h(a, host))),
-        Con::LetAx { binder, scrut, body } => Con::LetAx {
+        Con::LetAx {
+            binder,
+            scrut,
+            body,
+        } => Con::LetAx {
             binder: *binder,
             scrut: Box::new(subst_con(scrut, phi, host)),
             body: Box::new(subst_con(body, phi, host)),
@@ -1769,7 +1784,18 @@ fn con_eq(a: &Con, b: &Con) -> bool {
         | (Con::Tt, Con::Tt)
         | (Con::Nat, Con::Nat)
         | (Con::Z, Con::Z) => true,
-        (Con::Field { idx: i, host: h1, args: a1 }, Con::Field { idx: j, host: h2, args: a2 }) => {
+        (
+            Con::Field {
+                idx: i,
+                host: h1,
+                args: a1,
+            },
+            Con::Field {
+                idx: j,
+                host: h2,
+                args: a2,
+            },
+        ) => {
             i == j
                 && h1.len() == h2.len()
                 && a1.len() == a2.len()
@@ -1811,7 +1837,10 @@ fn con_to_htm(c: &Con, impls: &[u32]) -> HTm {
         Con::Empty => HTm::Empty,
         Con::Unit => HTm::Unit,
         Con::Nat => HTm::Nat,
-        Con::Sum(a, b) => HTm::Sum(Box::new(con_to_htm(a, impls)), Box::new(con_to_htm(b, impls))),
+        Con::Sum(a, b) => HTm::Sum(
+            Box::new(con_to_htm(a, impls)),
+            Box::new(con_to_htm(b, impls)),
+        ),
         Con::Sigma { binder, dom, cod } => HTm::Sigma {
             binder: *binder,
             dom: Box::new(con_to_htm(dom, impls)),

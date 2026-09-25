@@ -93,7 +93,10 @@ impl Config {
     }
 
     fn n_rep(&self) -> usize {
-        assert!(self.n_heads % self.n_kv_heads == 0, "kv heads divide query heads");
+        assert!(
+            self.n_heads % self.n_kv_heads == 0,
+            "kv heads divide query heads"
+        );
         self.n_heads / self.n_kv_heads
     }
 }
@@ -142,17 +145,49 @@ pub(crate) fn arch(cfg: &Config) -> Arch {
     for layer in 0..cfg.n_layers {
         let p = format!("layers.{layer}");
         let attn_norm = add(format!("{p}.attn_norm"), vec![cfg.dim], Init::Ones);
-        let wq = add(format!("{p}.wq"), vec![cfg.dim, cfg.n_heads * hd], Init::Normal);
-        let wk = add(format!("{p}.wk"), vec![cfg.dim, cfg.n_kv_heads * hd], Init::Normal);
-        let wv = add(format!("{p}.wv"), vec![cfg.dim, cfg.n_kv_heads * hd], Init::Normal);
-        let wo = add(format!("{p}.wo"), vec![cfg.n_heads * hd, cfg.dim], Init::Normal);
+        let wq = add(
+            format!("{p}.wq"),
+            vec![cfg.dim, cfg.n_heads * hd],
+            Init::Normal,
+        );
+        let wk = add(
+            format!("{p}.wk"),
+            vec![cfg.dim, cfg.n_kv_heads * hd],
+            Init::Normal,
+        );
+        let wv = add(
+            format!("{p}.wv"),
+            vec![cfg.dim, cfg.n_kv_heads * hd],
+            Init::Normal,
+        );
+        let wo = add(
+            format!("{p}.wo"),
+            vec![cfg.n_heads * hd, cfg.dim],
+            Init::Normal,
+        );
         let ffn_norm = add(format!("{p}.ffn_norm"), vec![cfg.dim], Init::Ones);
-        let gate = add(format!("{p}.gate"), vec![cfg.dim, cfg.n_experts], Init::Normal);
+        let gate = add(
+            format!("{p}.gate"),
+            vec![cfg.dim, cfg.n_experts],
+            Init::Normal,
+        );
         let mut experts = Vec::new();
         for e in 0..cfg.n_experts {
-            let w1 = add(format!("{p}.experts.{e}.w1"), vec![cfg.dim, cfg.intermediate], Init::Normal);
-            let w3 = add(format!("{p}.experts.{e}.w3"), vec![cfg.dim, cfg.intermediate], Init::Normal);
-            let w2 = add(format!("{p}.experts.{e}.w2"), vec![cfg.intermediate, cfg.dim], Init::Normal);
+            let w1 = add(
+                format!("{p}.experts.{e}.w1"),
+                vec![cfg.dim, cfg.intermediate],
+                Init::Normal,
+            );
+            let w3 = add(
+                format!("{p}.experts.{e}.w3"),
+                vec![cfg.dim, cfg.intermediate],
+                Init::Normal,
+            );
+            let w2 = add(
+                format!("{p}.experts.{e}.w2"),
+                vec![cfg.intermediate, cfg.dim],
+                Init::Normal,
+            );
             experts.push([w1, w3, w2]);
         }
         layers.push(LayerSpec {
@@ -242,6 +277,7 @@ fn bind(arch: &Arch, params: &[f32]) -> Bound {
     Bound { g, nodes }
 }
 
+#[derive(Clone)]
 pub struct Batch {
     pub tokens: Vec<u32>,
     pub batch: usize,
@@ -375,9 +411,15 @@ pub(crate) fn moe(
     (g.add(x, y), route.probs, route.counts)
 }
 
-fn forward(cfg: &Config, arch: &Arch, params: &[f32], batch: &Batch) -> (Graph, Vec<usize>, usize, Vec<Vec<u32>>) {
+fn forward(
+    cfg: &Config,
+    arch: &Arch,
+    params: &[f32],
+    batch: &Batch,
+) -> (Graph, Vec<usize>, usize, Vec<Vec<u32>>) {
     let mut b = bind(arch, params);
-    let mut x = b.g.embed(b.nodes[arch.embed], &batch.tokens, batch.batch, batch.seq);
+    let mut x =
+        b.g.embed(b.nodes[arch.embed], &batch.tokens, batch.batch, batch.seq);
     let mut probs = Vec::new();
     let mut counts = Vec::new();
     for layer in &arch.layers {
@@ -389,7 +431,11 @@ fn forward(cfg: &Config, arch: &Arch, params: &[f32], batch: &Batch) -> (Graph, 
             o: b.nodes[layer.wo],
         };
         x = attention(cfg, &mut b.g, aw, x, batch.seq);
-        let experts: Vec<[usize; 3]> = layer.experts.iter().map(|e| [b.nodes[e[0]], b.nodes[e[1]], b.nodes[e[2]]]).collect();
+        let experts: Vec<[usize; 3]> = layer
+            .experts
+            .iter()
+            .map(|e| [b.nodes[e[0]], b.nodes[e[1]], b.nodes[e[2]]])
+            .collect();
         let norm = b.nodes[layer.ffn_norm];
         let gate = b.nodes[layer.gate];
         let (y, p, c) = moe(cfg, &mut b.g, norm, gate, &experts, x);
@@ -400,7 +446,8 @@ fn forward(cfg: &Config, arch: &Arch, params: &[f32], batch: &Batch) -> (Graph, 
     let hidden = b.g.rmsnorm(x, b.nodes[arch.norm], cfg.rms_norm_eps);
     let logits = b.g.matmul(hidden, b.nodes[arch.head]);
     let shifted = b.g.slice(logits, 1, 0, batch.seq - 1);
-    let pred = b.g.reshape(shifted, &[batch.batch * (batch.seq - 1), cfg.vocab]);
+    let pred =
+        b.g.reshape(shifted, &[batch.batch * (batch.seq - 1), cfg.vocab]);
     let mut targets = Vec::with_capacity(batch.batch * (batch.seq - 1));
     for bi in 0..batch.batch {
         for t in 1..batch.seq {
@@ -491,7 +538,11 @@ pub fn compile_mixtral() -> CompileReport {
     let params0 = init_params(&smooth, 0x4D49_5854);
     let batch = sample_batch(&smooth, 2, 6, 7);
     let base = evaluate(&smooth, &params0, &batch);
-    let names = arch(&smooth).slots.into_iter().map(|s| s.name).collect::<Vec<_>>();
+    let names = arch(&smooth)
+        .slots
+        .into_iter()
+        .map(|s| s.name)
+        .collect::<Vec<_>>();
     let off = {
         let slots = arch(&smooth).slots;
         offsets(&slots)
@@ -561,7 +612,10 @@ pub fn compile_mixtral() -> CompileReport {
         }
     }
     assert!(saw_used, "a routed expert should receive tokens");
-    assert!(saw_unused, "top-2 of 8 should leave an expert idle on this batch");
+    assert!(
+        saw_unused,
+        "top-2 of 8 should leave an expert idle on this batch"
+    );
     let _ = grad_norm(&base.grads);
     let budget = crate::stage::Memory {
         code_bytes: 1 << 20,

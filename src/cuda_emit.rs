@@ -285,19 +285,71 @@ pub struct KernelSpec {
 
 pub fn kernel_catalog() -> &'static [KernelSpec] {
     &[
-        KernelSpec { name: "gemm", code_bytes: 3_592, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "gemm_dgrad", code_bytes: 3_336, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "gemm_wgrad", code_bytes: 3_720, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "rmsnorm_fwd", code_bytes: 8_208, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "rmsnorm_bwd", code_bytes: 9_120, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "rope", code_bytes: 1_296, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "softmax_fwd", code_bytes: 7_680, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "softmax_bwd", code_bytes: 6_920, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "silu_fwd", code_bytes: 1_912, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "silu_bwd", code_bytes: 2_048, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "embed", code_bytes: 1_152, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "embed_bwd", code_bytes: 1_152, cpu_code_bytes: 4_096 },
-        KernelSpec { name: "ce_grad", code_bytes: 8_456, cpu_code_bytes: 4_096 },
+        KernelSpec {
+            name: "gemm",
+            code_bytes: 3_592,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "gemm_dgrad",
+            code_bytes: 3_336,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "gemm_wgrad",
+            code_bytes: 3_720,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "rmsnorm_fwd",
+            code_bytes: 8_208,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "rmsnorm_bwd",
+            code_bytes: 9_120,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "rope",
+            code_bytes: 1_296,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "softmax_fwd",
+            code_bytes: 7_680,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "softmax_bwd",
+            code_bytes: 6_920,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "silu_fwd",
+            code_bytes: 1_912,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "silu_bwd",
+            code_bytes: 2_048,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "embed",
+            code_bytes: 1_152,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "embed_bwd",
+            code_bytes: 1_152,
+            cpu_code_bytes: 4_096,
+        },
+        KernelSpec {
+            name: "ce_grad",
+            code_bytes: 8_456,
+            cpu_code_bytes: 4_096,
+        },
     ]
 }
 

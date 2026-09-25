@@ -307,7 +307,11 @@ impl Env {
     }
 
     pub fn get(&self, lvl: u32) -> Option<&Slot> {
-        self.slots.iter().rev().find(|(l, _)| *l == lvl).map(|(_, s)| s)
+        self.slots
+            .iter()
+            .rev()
+            .find(|(l, _)| *l == lvl)
+            .map(|(_, s)| s)
     }
 
     pub fn insert(&self, lvl: u32, slot: Slot) -> Env {
@@ -483,21 +487,12 @@ pub enum HVal {
 
 #[derive(Clone, Debug)]
 pub enum MHead {
-    Var {
-        lvl: u32,
-    },
+    Var { lvl: u32 },
     Pr1(Box<MHead>),
     Pr2(Box<MHead>),
-    App {
-        fun: Box<MHead>,
-        arg: Box<HVal>,
-    },
-    IndSum {
-        scrut: Box<HVal>,
-    },
-    IndNat {
-        scrut: Box<HVal>,
-    },
+    App { fun: Box<MHead>, arg: Box<HVal> },
+    IndSum { scrut: Box<HVal> },
+    IndNat { scrut: Box<HVal> },
 }
 
 #[derive(Clone, Debug)]
@@ -507,10 +502,7 @@ pub enum MVal {
     Lam(Box<MClos>),
     Sort(Box<HVal>),
     Ax(Box<HVal>),
-    Neu {
-        head: Box<MHead>,
-        thy: Box<TVal>,
-    },
+    Neu { head: Box<MHead>, thy: Box<TVal> },
     StuckWeak(Box<MVal>, u32),
     StuckSub(Box<MVal>, Box<MVal>, u32),
     MHole(u32),
@@ -541,13 +533,8 @@ pub enum TVal {
 
 #[derive(Clone)]
 enum Trav {
-    Weak {
-        past: u32,
-    },
-    Sub {
-        past: u32,
-        repl: MVal,
-    },
+    Weak { past: u32 },
+    Sub { past: u32, repl: MVal },
 }
 
 pub struct Nbe {
@@ -628,10 +615,14 @@ impl Nbe {
                     body: (**cod).clone(),
                 })),
             ),
-            HTm::Pair(a, b) => HVal::Pair(Box::new(self.eval_h(a, env)), Box::new(self.eval_h(b, env))),
+            HTm::Pair(a, b) => {
+                HVal::Pair(Box::new(self.eval_h(a, env)), Box::new(self.eval_h(b, env)))
+            }
             HTm::Fst(t) => self.fst_h(self.eval_h(t, env)),
             HTm::Snd(t) => self.snd_h(self.eval_h(t, env)),
-            HTm::Sum(a, b) => HVal::Sum(Box::new(self.eval_h(a, env)), Box::new(self.eval_h(b, env))),
+            HTm::Sum(a, b) => {
+                HVal::Sum(Box::new(self.eval_h(a, env)), Box::new(self.eval_h(b, env)))
+            }
             HTm::Inl(t) => HVal::Inl(Box::new(self.eval_h(t, env))),
             HTm::Inr(t) => HVal::Inr(Box::new(self.eval_h(t, env))),
             HTm::Match {
@@ -1003,7 +994,10 @@ impl Nbe {
                     _ => TVal::One,
                 };
                 MVal::Neu {
-                    head: Box::new(MHead::App { fun: head, arg: Box::new(arg) }),
+                    head: Box::new(MHead::App {
+                        fun: head,
+                        arg: Box::new(arg),
+                    }),
                     thy: Box::new(res),
                 }
             }
@@ -1166,10 +1160,7 @@ impl Nbe {
             HVal::Frozen(v) => self.eval_j(*v, refl_case, ty, a, b, y_b, p_b, motive, env),
             HVal::Neu(h) => {
                 let mut e = env.insert(y_b, Slot::H(b.clone()));
-                e = e.insert(
-                    p_b,
-                    Slot::H(HVal::Neu(h.clone())),
-                );
+                e = e.insert(p_b, Slot::H(HVal::Neu(h.clone())));
                 let tyv = self.eval_h(motive, &e);
                 let _ = (ty, a);
                 HVal::Neu(Box::new(Head::J {
@@ -1200,19 +1191,8 @@ impl Nbe {
         match s {
             HVal::Z => self.eval_h(zcase, env),
             HVal::S(n) => {
-                let ih = self.eval_natind(
-                    *n.clone(),
-                    k_b,
-                    motive,
-                    zcase,
-                    m_b,
-                    ih_b,
-                    scase,
-                    env,
-                );
-                let e = env
-                    .insert(m_b, Slot::H(*n))
-                    .insert(ih_b, Slot::H(ih));
+                let ih = self.eval_natind(*n.clone(), k_b, motive, zcase, m_b, ih_b, scase, env);
+                let e = env.insert(m_b, Slot::H(*n)).insert(ih_b, Slot::H(ih));
                 self.eval_h(scase, &e)
             }
             HVal::Frozen(v) => self.eval_natind(*v, k_b, motive, zcase, m_b, ih_b, scase, env),
@@ -1276,9 +1256,7 @@ impl Nbe {
                 thy: Box::new(TVal::One),
             },
             _ => MVal::Neu {
-                head: Box::new(MHead::IndSum {
-                    scrut: Box::new(s),
-                }),
+                head: Box::new(MHead::IndSum { scrut: Box::new(s) }),
                 thy: Box::new(TVal::One),
             },
         }
@@ -1347,7 +1325,10 @@ impl Nbe {
                     HVal::Sigma(d, _) => *d,
                     other => other,
                 };
-                HVal::Neu(Box::new(Head::Fst { of: h, ty: Box::new(ty) }))
+                HVal::Neu(Box::new(Head::Fst {
+                    of: h,
+                    ty: Box::new(ty),
+                }))
             }
             other => other,
         }
@@ -1368,7 +1349,10 @@ impl Nbe {
                     }
                     other => other,
                 };
-                HVal::Neu(Box::new(Head::Snd { of: h, ty: Box::new(ty) }))
+                HVal::Neu(Box::new(Head::Snd {
+                    of: h,
+                    ty: Box::new(ty),
+                }))
             }
             other => other,
         }
@@ -1796,9 +1780,7 @@ impl Nbe {
             HVal::Ty(m) => HVal::Ty(Box::new(self.subst_hole_m(*m, hole, arg))),
             HVal::Unax(m) => HVal::Unax(Box::new(self.subst_hole_m(*m, hole, arg))),
             HVal::Neu(h) => HVal::Neu(Box::new(self.subst_hole_head(*h, hole, arg))),
-            HVal::StuckWeak(i, p) => {
-                HVal::StuckWeak(Box::new(self.subst_hole_h(*i, hole, arg)), p)
-            }
+            HVal::StuckWeak(i, p) => HVal::StuckWeak(Box::new(self.subst_hole_h(*i, hole, arg)), p),
             HVal::StuckSub(i, m, p) => HVal::StuckSub(
                 Box::new(self.subst_hole_h(*i, hole, arg)),
                 Box::new(self.subst_hole_m(*m, hole, arg)),
@@ -2537,12 +2519,12 @@ impl Nbe {
             }
             (HVal::Sum(a, b), HVal::Sum(c, d)) => self.eq_ty(*a, *c) && self.eq_ty(*b, *d),
             (HVal::Id(t1, a1, b1), HVal::Id(t2, a2, b2)) => {
-                self.eq_ty(*t1.clone(), *t2) && self.eq_tm(&t1, *a1, *a2) && self.eq_tm(&t1, *b1, *b2)
+                self.eq_ty(*t1.clone(), *t2)
+                    && self.eq_tm(&t1, *a1, *a2)
+                    && self.eq_tm(&t1, *b1, *b2)
             }
             (HVal::Ty(m1), HVal::Ty(m2)) => self.eq_m(*m1, *m2),
-            (HVal::StuckWeak(v1, p1), HVal::StuckWeak(v2, p2)) => {
-                p1 == p2 && self.eq_ty(*v1, *v2)
-            }
+            (HVal::StuckWeak(v1, p1), HVal::StuckWeak(v2, p2)) => p1 == p2 && self.eq_ty(*v1, *v2),
             (HVal::StuckSub(v1, m1, p1), HVal::StuckSub(v2, m2, p2)) => {
                 p1 == p2 && self.eq_m(*m1, *m2) && self.eq_ty(*v1, *v2)
             }
@@ -2575,9 +2557,7 @@ impl Nbe {
             HVal::Unit => true,
             HVal::U => self.eq_ty(a, b),
             HVal::Id(carrier, _, _) => match (&a, &b) {
-                (HVal::Refl(p), HVal::Refl(q)) => {
-                    self.eq_tm(carrier, (**p).clone(), (**q).clone())
-                }
+                (HVal::Refl(p), HVal::Refl(q)) => self.eq_tm(carrier, (**p).clone(), (**q).clone()),
                 _ => self.eq_structural(a, b),
             },
             HVal::Sum(lt, rt) => match (&a, &b) {
@@ -2600,7 +2580,9 @@ impl Nbe {
             | (HVal::Empty, HVal::Empty)
             | (HVal::Unit, HVal::Unit) => true,
             (HVal::S(n), HVal::S(m)) => self.eq_structural(*n, *m),
-            (HVal::Inl(a), HVal::Inl(b)) | (HVal::Inr(a), HVal::Inr(b)) => self.eq_structural(*a, *b),
+            (HVal::Inl(a), HVal::Inl(b)) | (HVal::Inr(a), HVal::Inr(b)) => {
+                self.eq_structural(*a, *b)
+            }
             (HVal::Refl(a), HVal::Refl(b)) => self.eq_structural(*a, *b),
             (HVal::Pair(a1, b1), HVal::Pair(a2, b2)) => {
                 self.eq_structural(*a1, *a2) && self.eq_structural(*b1, *b2)
@@ -2690,12 +2672,10 @@ impl Nbe {
         ));
         let t1 = self.eval_h(
             m1,
-            &e1.insert(y1, Slot::H(y.clone())).insert(q1, Slot::H(path.clone())),
+            &e1.insert(y1, Slot::H(y.clone()))
+                .insert(q1, Slot::H(path.clone())),
         );
-        let t2 = self.eval_h(
-            m2,
-            &e2.insert(y2, Slot::H(y)).insert(q2, Slot::H(path)),
-        );
+        let t2 = self.eval_h(m2, &e2.insert(y2, Slot::H(y)).insert(q2, Slot::H(path)));
         if !self.eq_ty(t1, t2) {
             return false;
         }
@@ -2742,18 +2722,13 @@ impl Nbe {
         let n = self.fresh_neu(&HVal::Nat);
         let ih_ty = self.eval_h(m1, &e1.insert(k1, Slot::H(n.clone())));
         let ih = self.fresh_neu(&ih_ty);
-        let smot = self.eval_h(
-            m1,
-            &e1.insert(k1, Slot::H(HVal::S(Box::new(n.clone())))),
-        );
+        let smot = self.eval_h(m1, &e1.insert(k1, Slot::H(HVal::S(Box::new(n.clone())))));
         let b1 = self.eval_h(
             c1,
-            &e1.insert(n1, Slot::H(n.clone())).insert(i1, Slot::H(ih.clone())),
+            &e1.insert(n1, Slot::H(n.clone()))
+                .insert(i1, Slot::H(ih.clone())),
         );
-        let b2 = self.eval_h(
-            c2,
-            &e2.insert(n2, Slot::H(n)).insert(i2, Slot::H(ih)),
-        );
+        let b2 = self.eval_h(c2, &e2.insert(n2, Slot::H(n)).insert(i2, Slot::H(ih)));
         self.eq_tm(&smot, b1, b2)
     }
 
@@ -2829,7 +2804,9 @@ impl Nbe {
                     scase: c2,
                     ..
                 },
-            ) => self.eq_natind(s1, s2, e1, e2, *k1, *k2, m1, m2, z1, z2, *n1, *n2, *i1, *i2, c1, c2),
+            ) => self.eq_natind(
+                s1, s2, e1, e2, *k1, *k2, m1, m2, z1, z2, *n1, *n2, *i1, *i2, c1, c2,
+            ),
             (Head::Exfalso { scrut: s1, .. }, Head::Exfalso { scrut: s2, .. }) => {
                 self.eq_head(s1, s2)
             }
@@ -2842,9 +2819,7 @@ impl Nbe {
         let b = self.thaw_m(b);
         match (a, b) {
             (MVal::Tt, MVal::Tt) => true,
-            (MVal::Pair(a1, b1), MVal::Pair(a2, b2)) => {
-                self.eq_m(*a1, *a2) && self.eq_m(*b1, *b2)
-            }
+            (MVal::Pair(a1, b1), MVal::Pair(a2, b2)) => self.eq_m(*a1, *a2) && self.eq_m(*b1, *b2),
             (MVal::Pair(a1, b1), other) | (other, MVal::Pair(a1, b1)) => {
                 self.eq_m(*a1, self.pr1(other.clone())) && self.eq_m(*b1, self.pr2(other))
             }
@@ -2858,13 +2833,8 @@ impl Nbe {
             }
             (MVal::Sort(a), MVal::Sort(b)) => self.eq_ty(*a, *b),
             (MVal::Ax(a), MVal::Ax(b)) => self.eq_structural(*a, *b),
-            (
-                MVal::Neu { head: h1, .. },
-                MVal::Neu { head: h2, .. },
-            ) => self.eq_mhead(&h1, &h2),
-            (MVal::StuckWeak(v1, p1), MVal::StuckWeak(v2, p2)) => {
-                p1 == p2 && self.eq_m(*v1, *v2)
-            }
+            (MVal::Neu { head: h1, .. }, MVal::Neu { head: h2, .. }) => self.eq_mhead(&h1, &h2),
+            (MVal::StuckWeak(v1, p1), MVal::StuckWeak(v2, p2)) => p1 == p2 && self.eq_m(*v1, *v2),
             (MVal::StuckSub(v1, m1, p1), MVal::StuckSub(v2, m2, p2)) => {
                 p1 == p2 && self.eq_m(*m1, *m2) && self.eq_m(*v1, *v2)
             }
@@ -2875,9 +2845,7 @@ impl Nbe {
     fn eq_mhead(&self, a: &MHead, b: &MHead) -> bool {
         match (a, b) {
             (MHead::Var { lvl: l1 }, MHead::Var { lvl: l2 }) => l1 == l2,
-            (MHead::Pr1(a), MHead::Pr1(b)) | (MHead::Pr2(a), MHead::Pr2(b)) => {
-                self.eq_mhead(a, b)
-            }
+            (MHead::Pr1(a), MHead::Pr1(b)) | (MHead::Pr2(a), MHead::Pr2(b)) => self.eq_mhead(a, b),
             (MHead::App { fun: f1, arg: a1 }, MHead::App { fun: f2, arg: a2 }) => {
                 self.eq_mhead(f1, f2) && self.eq_structural((**a1).clone(), (**a2).clone())
             }
@@ -3154,7 +3122,11 @@ fn transport_con(c: Con, trav: &Trav) -> Con {
         },
         Con::Ax(a) => Con::Ax(Box::new(wrap_h(*a, trav))),
         Con::AxIn(a) => Con::AxIn(Box::new(wrap_h(*a, trav))),
-        Con::LetAx { binder, scrut, body } => Con::LetAx {
+        Con::LetAx {
+            binder,
+            scrut,
+            body,
+        } => Con::LetAx {
             binder,
             scrut: Box::new(transport_con(*scrut, trav)),
             body: Box::new(transport_con(*body, trav)),

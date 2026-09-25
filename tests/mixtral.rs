@@ -1,6 +1,6 @@
 use gtt::{
-    check_source, compile_mixtral, minimum_budget, parameter_count, schedule, verify_staged_checkpoint,
-    Config, Memory,
+    check_source, compile_mixtral, minimum_budget, parameter_count, schedule,
+    verify_distributed_step, verify_staged_checkpoint, Config, Memory,
 };
 use std::fs;
 use std::process::Command;
@@ -14,7 +14,10 @@ fn mixtral_signature_typechecks() {
 #[test]
 fn mixtral_forward_adjoint_and_sgd() {
     let paper = parameter_count(&Config::mixtral_8x7b());
-    assert_eq!(paper, 46_702_792_704, "published Mixtral-8x7B parameter count");
+    assert_eq!(
+        paper, 46_702_792_704,
+        "published Mixtral-8x7B parameter count"
+    );
     let report = compile_mixtral();
     assert_eq!(report.paper_parameters, paper);
     assert_eq!(report.active_parameters, 12_879_925_248);
@@ -23,7 +26,10 @@ fn mixtral_forward_adjoint_and_sgd() {
         "adjoint disagrees with finite differences by {}",
         report.max_abs_fd_error
     );
-    assert!(report.loss_after < report.loss_before, "SGD did not descend");
+    assert!(
+        report.loss_after < report.loss_before,
+        "SGD did not descend"
+    );
     assert!(report.learning_rate > 0.0);
     assert!(report.sparse_loss.is_finite());
     assert!(
@@ -66,11 +72,26 @@ fn mixtral_stages_parameters_under_a_memory_budget() {
         assert_eq!(stage.code_bytes, code);
         let buffers: u64 = stage.buffers.iter().map(|b| b.bytes).sum();
         assert_eq!(stage.buffer_bytes, buffers);
-        assert!(stage.kernels.iter().any(|k| k.starts_with("gemm") || *k == "embed" || *k == "ce_grad"));
-        assert!(stage.buffers.iter().any(|b| b.role == gtt::BufferRole::Parameter));
-        assert!(stage.buffers.iter().any(|b| b.role == gtt::BufferRole::Adjoint));
-        assert!(stage.buffers.iter().any(|b| b.role == gtt::BufferRole::Checkpoint));
-        assert!(stage.buffers.iter().any(|b| b.role == gtt::BufferRole::Scratch));
+        assert!(stage
+            .kernels
+            .iter()
+            .any(|k| k.starts_with("gemm") || *k == "embed" || *k == "ce_grad"));
+        assert!(stage
+            .buffers
+            .iter()
+            .any(|b| b.role == gtt::BufferRole::Parameter));
+        assert!(stage
+            .buffers
+            .iter()
+            .any(|b| b.role == gtt::BufferRole::Adjoint));
+        assert!(stage
+            .buffers
+            .iter()
+            .any(|b| b.role == gtt::BufferRole::Checkpoint));
+        assert!(stage
+            .buffers
+            .iter()
+            .any(|b| b.role == gtt::BufferRole::Scratch));
     }
     assert!(schedule(
         &paper,
@@ -158,12 +179,25 @@ fn mixtral_places_stages_on_a_heterogeneous_cluster() {
     assert_eq!(h0.src, "cpu0");
     assert_eq!(h0.phase, gtt::Phase::Forward);
     for step in &plan.steps {
-        if let gtt::Step::Update { stage, device, params } = step {
+        if let gtt::Step::Update {
+            stage,
+            device,
+            params,
+        } = step
+        {
             let owner = plan.stages.iter().find(|s| s.name == *stage).unwrap();
             assert_eq!(owner.device, *device);
             assert_eq!(owner.params, *params);
         }
     }
+}
+
+#[test]
+fn mixtral_coordinates_cluster_members() {
+    let dir = std::env::temp_dir().join(format!("mixtral-dist-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    verify_distributed_step(&dir).unwrap_or_else(|err| panic!("{err}"));
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]

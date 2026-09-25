@@ -6,9 +6,7 @@
 //! kernels and its buffers, applies `θ ← θ − η ∇L`, and drops both.
 
 use crate::ad::Graph;
-use crate::mixtral::{
-    arch, attention, each_init, moe, router, sgd, swiglu, AttnW, Batch, Config,
-};
+use crate::mixtral::{arch, attention, each_init, moe, router, sgd, swiglu, AttnW, Batch, Config};
 use std::fs;
 use std::path::Path;
 
@@ -338,13 +336,9 @@ fn kernel_names(kind: &StageKind) -> Vec<&'static str> {
             "softmax_fwd",
             "softmax_bwd",
         ],
-        StageKind::Expert { .. } => vec![
-            "gemm",
-            "gemm_dgrad",
-            "gemm_wgrad",
-            "silu_fwd",
-            "silu_bwd",
-        ],
+        StageKind::Expert { .. } => {
+            vec!["gemm", "gemm_dgrad", "gemm_wgrad", "silu_fwd", "silu_bwd"]
+        }
         StageKind::Head => vec![
             "gemm",
             "gemm_dgrad",
@@ -460,9 +454,18 @@ pub fn mixtral_cluster() -> Cluster {
             },
         ],
         links: vec![
-            Link { a: "cpu0".into(), b: "gpu0".into() },
-            Link { a: "cpu0".into(), b: "gpu1".into() },
-            Link { a: "cpu0".into(), b: "gpu2".into() },
+            Link {
+                a: "cpu0".into(),
+                b: "gpu0".into(),
+            },
+            Link {
+                a: "cpu0".into(),
+                b: "gpu1".into(),
+            },
+            Link {
+                a: "cpu0".into(),
+                b: "gpu2".into(),
+            },
         ],
     }
 }
@@ -480,7 +483,10 @@ pub fn minimum_budget(cfg: &Config, batch: usize, seq: usize) -> Result<Memory, 
         .max(peak(saved, head_values(cfg, batch, seq)))
         .max(peak(saved, embed_values(cfg, batch, seq)));
     let code_bytes = code_bytes(&StageKind::Attention(0))
-        .max(code_bytes(&StageKind::Expert { layer: 0, expert: 0 }))
+        .max(code_bytes(&StageKind::Expert {
+            layer: 0,
+            expert: 0,
+        }))
         .max(code_bytes(&StageKind::Router(0)))
         .max(code_bytes(&StageKind::Head))
         .max(code_bytes(&StageKind::Embed));
@@ -537,7 +543,10 @@ pub fn schedule_on(
         let joint_peak = peak(saved_bytes(cfg, batch, seq, n_split), joint);
         let joint_kind = StageKind::Layer(li);
         let expert_peak_for_spread = peak(saved_if_split, expert_values(cfg, batch, seq));
-        let expert_kind_for_spread = StageKind::Expert { layer: li, expert: 0 };
+        let expert_kind_for_spread = StageKind::Expert {
+            layer: li,
+            expert: 0,
+        };
         let gpus_for_expert = cluster
             .devices
             .iter()
@@ -575,7 +584,10 @@ pub fn schedule_on(
             let router_peak = peak(saved, router_values(cfg, batch, seq));
             let need = attn_peak.max(expert_peak).max(router_peak);
             let attn_kind = StageKind::Attention(li);
-            let expert_kind = StageKind::Expert { layer: li, expert: 0 };
+            let expert_kind = StageKind::Expert {
+                layer: li,
+                expert: 0,
+            };
             let router_kind = StageKind::Router(li);
             let need_code = code_bytes(&attn_kind)
                 .max(code_bytes(&expert_kind))
@@ -608,7 +620,10 @@ pub fn schedule_on(
                 stages.push(make_stage(
                     &spec,
                     format!("layers.{li}.experts.{e}"),
-                    StageKind::Expert { layer: li, expert: e },
+                    StageKind::Expert {
+                        layer: li,
+                        expert: e,
+                    },
                     ws,
                     expert_values(cfg, batch, seq),
                     saved,
@@ -622,9 +637,7 @@ pub fn schedule_on(
     if !some_device_fits(cluster, embed_peak, &StageKind::Embed)
         || !some_device_fits(cluster, head_peak, &StageKind::Head)
     {
-        return Err(
-            "no device can hold the embedding or the output head".into(),
-        );
+        return Err("no device can hold the embedding or the output head".into());
     }
     stages.insert(
         0,
@@ -674,8 +687,18 @@ pub fn schedule_on(
     let peak_bytes = stages.iter().map(|s| s.buffer_bytes).max().unwrap_or(0);
     let peak_code_bytes = stages.iter().map(|s| s.code_bytes).max().unwrap_or(0);
     Ok(Schedule {
-        budget: cluster.devices.iter().map(|d| d.buffer_bytes).max().unwrap_or(0),
-        code_budget: cluster.devices.iter().map(|d| d.code_bytes).max().unwrap_or(0),
+        budget: cluster
+            .devices
+            .iter()
+            .map(|d| d.buffer_bytes)
+            .max()
+            .unwrap_or(0),
+        code_budget: cluster
+            .devices
+            .iter()
+            .map(|d| d.code_bytes)
+            .max()
+            .unwrap_or(0),
         checkpoint_bytes: saved,
         stages,
         peak_bytes,
@@ -694,7 +717,9 @@ fn column_bytes(batch: usize, seq: usize) -> u64 {
 }
 
 fn is_split(stages: &[Stage], layer: usize) -> bool {
-    stages.iter().any(|stage| matches!(stage.kind, StageKind::Attention(i) if i == layer))
+    stages
+        .iter()
+        .any(|stage| matches!(stage.kind, StageKind::Attention(i) if i == layer))
 }
 
 fn h_parts(stages: &[Stage], layer: usize, n_experts: usize) -> Vec<String> {
@@ -720,7 +745,12 @@ fn tensor_bytes(name: &str, hidden: u64, column: u64) -> u64 {
     }
 }
 
-fn forward_inputs(stage: &Stage, stages: &[Stage], n_layers: usize, n_experts: usize) -> Vec<String> {
+fn forward_inputs(
+    stage: &Stage,
+    stages: &[Stage],
+    n_layers: usize,
+    n_experts: usize,
+) -> Vec<String> {
     match stage.kind {
         StageKind::Embed => Vec::new(),
         StageKind::Attention(i) | StageKind::Layer(i) => h_parts(stages, i, n_experts),
@@ -767,7 +797,12 @@ fn adjoint_consumes(stage: &Stage, n_experts: usize) -> Vec<String> {
     }
 }
 
-fn adjoint_produces(stage: &Stage, stages: &[Stage], n_layers: usize, n_experts: usize) -> Vec<String> {
+fn adjoint_produces(
+    stage: &Stage,
+    stages: &[Stage],
+    n_layers: usize,
+    n_experts: usize,
+) -> Vec<String> {
     match stage.kind {
         StageKind::Embed => Vec::new(),
         StageKind::Head => h_parts(stages, n_layers, n_experts)
@@ -792,8 +827,14 @@ fn route(cluster: &Cluster, src: &str, dst: &str) -> Result<Vec<String>, String>
     }
     let mut adjacent: std::collections::HashMap<&str, Vec<&str>> = std::collections::HashMap::new();
     for link in &cluster.links {
-        adjacent.entry(link.a.as_str()).or_default().push(link.b.as_str());
-        adjacent.entry(link.b.as_str()).or_default().push(link.a.as_str());
+        adjacent
+            .entry(link.a.as_str())
+            .or_default()
+            .push(link.b.as_str());
+        adjacent
+            .entry(link.b.as_str())
+            .or_default()
+            .push(link.a.as_str());
     }
     let mut queue = std::collections::VecDeque::new();
     let mut previous: std::collections::HashMap<String, String> = std::collections::HashMap::new();
@@ -834,7 +875,11 @@ fn send(
     if src == dst {
         return Ok(());
     }
-    let key = (format!("{phase:?}"), format!("{src}>{dst}"), tensor.to_string());
+    let key = (
+        format!("{phase:?}"),
+        format!("{src}>{dst}"),
+        tensor.to_string(),
+    );
     if !seen.insert(key) {
         return Ok(());
     }
@@ -867,7 +912,10 @@ fn coordinate(
     for stage in stages {
         for tensor in forward_inputs(stage, stages, n_layers, n_experts) {
             let src = produced.get(&tensor).cloned().ok_or_else(|| {
-                format!("forward stage {} needs {tensor} before it is produced", stage.name)
+                format!(
+                    "forward stage {} needs {tensor} before it is produced",
+                    stage.name
+                )
             })?;
             send(
                 &mut steps,
@@ -889,11 +937,15 @@ fn coordinate(
             produced.insert(tensor, stage.device.clone());
         }
     }
-    let mut adjoint_at: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut adjoint_at: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     for stage in stages.iter().rev() {
         for tensor in adjoint_consumes(stage, n_experts) {
             let src = adjoint_at.get(&tensor).cloned().ok_or_else(|| {
-                format!("adjoint stage {} needs {tensor} before it is produced", stage.name)
+                format!(
+                    "adjoint stage {} needs {tensor} before it is produced",
+                    stage.name
+                )
             })?;
             send(
                 &mut steps,
@@ -938,7 +990,10 @@ fn device_fits(device: &Device, buffer: u64, kind: &StageKind) -> bool {
 }
 
 fn some_device_fits(cluster: &Cluster, buffer: u64, kind: &StageKind) -> bool {
-    cluster.devices.iter().any(|device| device_fits(device, buffer, kind))
+    cluster
+        .devices
+        .iter()
+        .any(|device| device_fits(device, buffer, kind))
 }
 
 fn place(stages: &mut [Stage], cluster: &Cluster) -> Result<(), String> {
@@ -1000,12 +1055,34 @@ fn load(
     Ok(g.leaf(shape, mem.read(slot)?))
 }
 
+thread_local! {
+    static DEFER_GRADS: std::cell::RefCell<Option<std::collections::HashMap<usize, Vec<f32>>>> =
+        std::cell::RefCell::new(None);
+}
+
 fn update(mem: &mut dyn WeightMem, slot: usize, grad: &[f32], lr: f32) -> Result<(), String> {
+    let deferred = DEFER_GRADS.with(|slot_map| slot_map.borrow().is_some());
+    if deferred {
+        DEFER_GRADS.with(|slot_map| {
+            if let Some(map) = slot_map.borrow_mut().as_mut() {
+                map.insert(slot, grad.to_vec());
+            }
+        });
+        return Ok(());
+    }
     let mut w = mem.read(slot)?;
     for (value, g) in w.iter_mut().zip(grad) {
         *value -= lr * *g;
     }
     mem.write(slot, &w)
+}
+
+pub(crate) fn begin_deferred_grads() {
+    DEFER_GRADS.with(|slot_map| *slot_map.borrow_mut() = Some(std::collections::HashMap::new()));
+}
+
+pub(crate) fn take_deferred_grads() -> std::collections::HashMap<usize, Vec<f32>> {
+    DEFER_GRADS.with(|slot_map| slot_map.borrow_mut().take().unwrap_or_default())
 }
 
 fn fit(g: &Graph, reserved: u64, budget: u64, name: &str) -> Result<(), String> {
@@ -1043,7 +1120,7 @@ fn fractions(cfg: &Config, counts: &[Vec<u32>], ntok: usize) -> Vec<f32> {
     fraction
 }
 
-fn aux_cotangent(cfg: &Config, counts: &[Vec<u32>], ntok: usize) -> Vec<f32> {
+pub(crate) fn aux_cotangent(cfg: &Config, counts: &[Vec<u32>], ntok: usize) -> Vec<f32> {
     let rows = counts.len() * ntok;
     let fraction = fractions(cfg, counts, ntok);
     let scale = cfg.aux_loss_coef * cfg.n_experts as f32 / rows as f32;
@@ -1056,7 +1133,13 @@ fn aux_cotangent(cfg: &Config, counts: &[Vec<u32>], ntok: usize) -> Vec<f32> {
     cot
 }
 
-fn aux_value(cfg: &Config, prob_sum: &[f32], rows: usize, counts: &[Vec<u32>], ntok: usize) -> f32 {
+pub(crate) fn aux_value(
+    cfg: &Config,
+    prob_sum: &[f32],
+    rows: usize,
+    counts: &[Vec<u32>],
+    ntok: usize,
+) -> f32 {
     let fraction = fractions(cfg, counts, ntok);
     let mut s = 0f32;
     for e in 0..cfg.n_experts {
@@ -1141,7 +1224,12 @@ fn run_forward(
                 let x = g.leaf(&[batch.batch, batch.seq, cfg.dim], h_in);
                 let layer = &spec.layers[i];
                 let aw = AttnW {
-                    norm: load(&mut g, mem, layer.attn_norm, shape_of(&spec, layer.attn_norm))?,
+                    norm: load(
+                        &mut g,
+                        mem,
+                        layer.attn_norm,
+                        shape_of(&spec, layer.attn_norm),
+                    )?,
                     q: load(&mut g, mem, layer.wq, shape_of(&spec, layer.wq))?,
                     k: load(&mut g, mem, layer.wk, shape_of(&spec, layer.wk))?,
                     v: load(&mut g, mem, layer.wv, shape_of(&spec, layer.wv))?,
@@ -1177,7 +1265,12 @@ fn run_forward(
                 let x = g.leaf(&[batch.batch, batch.seq, cfg.dim], h_in);
                 let layer = &spec.layers[i];
                 let aw = AttnW {
-                    norm: load(&mut g, mem, layer.attn_norm, shape_of(&spec, layer.attn_norm))?,
+                    norm: load(
+                        &mut g,
+                        mem,
+                        layer.attn_norm,
+                        shape_of(&spec, layer.attn_norm),
+                    )?,
                     q: load(&mut g, mem, layer.wq, shape_of(&spec, layer.wq))?,
                     k: load(&mut g, mem, layer.wk, shape_of(&spec, layer.wk))?,
                     v: load(&mut g, mem, layer.wv, shape_of(&spec, layer.wv))?,
@@ -1278,7 +1371,16 @@ fn run_backward(
     let ntok = batch.batch * batch.seq;
     let reserved = plan.checkpoint_bytes;
     let aux = aux_cotangent(cfg, &tape.counts, ntok);
-    let mut dh = head_backward(cfg, batch, &spec, mem, &tape.inputs[cfg.n_layers], lr, reserved, plan.budget)?;
+    let mut dh = head_backward(
+        cfg,
+        batch,
+        &spec,
+        mem,
+        &tape.inputs[cfg.n_layers],
+        lr,
+        reserved,
+        plan.budget,
+    )?;
     let mut d_flat: Option<Vec<f32>> = None;
     let mut d_weights: Option<Vec<f32>> = None;
     let mut layer_dy: Option<Vec<f32>> = None;
@@ -1371,7 +1473,7 @@ fn run_backward(
     Ok(())
 }
 
-fn head_backward(
+pub(crate) fn head_backward(
     cfg: &Config,
     batch: &Batch,
     spec: &crate::mixtral::Arch,
@@ -1398,7 +1500,7 @@ fn head_backward(
     Ok(dh)
 }
 
-fn joint_backward(
+pub(crate) fn joint_backward(
     cfg: &Config,
     batch: &Batch,
     spec: &crate::mixtral::Arch,
@@ -1415,7 +1517,12 @@ fn joint_backward(
     let mut g = Graph::new();
     let x = g.leaf(&[batch.batch, batch.seq, cfg.dim], h_in.to_vec());
     let aw = AttnW {
-        norm: load(&mut g, mem, layer.attn_norm, shape_of(spec, layer.attn_norm))?,
+        norm: load(
+            &mut g,
+            mem,
+            layer.attn_norm,
+            shape_of(spec, layer.attn_norm),
+        )?,
         q: load(&mut g, mem, layer.wq, shape_of(spec, layer.wq))?,
         k: load(&mut g, mem, layer.wk, shape_of(spec, layer.wk))?,
         v: load(&mut g, mem, layer.wv, shape_of(spec, layer.wv))?,
@@ -1459,7 +1566,7 @@ fn joint_backward(
     Ok(dx)
 }
 
-fn attn_backward(
+pub(crate) fn attn_backward(
     cfg: &Config,
     batch: &Batch,
     spec: &crate::mixtral::Arch,
@@ -1475,7 +1582,12 @@ fn attn_backward(
     let mut g = Graph::new();
     let x = g.leaf(&[batch.batch, batch.seq, cfg.dim], h_in.to_vec());
     let aw = AttnW {
-        norm: load(&mut g, mem, layer.attn_norm, shape_of(spec, layer.attn_norm))?,
+        norm: load(
+            &mut g,
+            mem,
+            layer.attn_norm,
+            shape_of(spec, layer.attn_norm),
+        )?,
         q: load(&mut g, mem, layer.wq, shape_of(spec, layer.wq))?,
         k: load(&mut g, mem, layer.wk, shape_of(spec, layer.wk))?,
         v: load(&mut g, mem, layer.wv, shape_of(spec, layer.wv))?,
@@ -1493,7 +1605,7 @@ fn attn_backward(
     Ok(dx)
 }
 
-fn expert_backward(
+pub(crate) fn expert_backward(
     cfg: &Config,
     batch: &Batch,
     spec: &crate::mixtral::Arch,
@@ -1534,7 +1646,7 @@ fn expert_backward(
     Ok((g.grad(flat).to_vec(), g.grad(col).to_vec()))
 }
 
-fn router_backward(
+pub(crate) fn router_backward(
     cfg: &Config,
     batch: &Batch,
     spec: &crate::mixtral::Arch,
@@ -1574,7 +1686,7 @@ fn router_backward(
     Ok(dh)
 }
 
-fn embed_backward(
+pub(crate) fn embed_backward(
     _cfg: &Config,
     batch: &Batch,
     spec: &crate::mixtral::Arch,
@@ -1629,7 +1741,9 @@ pub fn save_random(dir: &Path, cfg: &Config, seed: u64) -> Result<(), String> {
 
 pub fn read_checkpoint(dir: &Path, cfg: &Config) -> Result<Vec<f32>, String> {
     let spec = arch(cfg);
-    let mut mem = DiskWeights { dir: dir.to_path_buf() };
+    let mut mem = DiskWeights {
+        dir: dir.to_path_buf(),
+    };
     let mut out = Vec::new();
     for slot in 0..spec.slots.len() {
         out.extend(mem.read(slot)?);
@@ -1644,7 +1758,9 @@ pub fn staged_update_dir(
     memory: Memory,
     lr: f32,
 ) -> Result<f32, String> {
-    let mut mem = DiskWeights { dir: dir.to_path_buf() };
+    let mut mem = DiskWeights {
+        dir: dir.to_path_buf(),
+    };
     staged_update(cfg, batch, memory, lr, &mut mem)
 }
 
@@ -1693,9 +1809,305 @@ fn write_flat(dir: &Path, cfg: &Config, params: &[f32]) -> Result<(), String> {
     let mut offset = 0usize;
     for (slot, s) in spec.slots.iter().enumerate() {
         let n: usize = s.shape.iter().product();
-        let mut mem = DiskWeights { dir: dir.to_path_buf() };
+        let mut mem = DiskWeights {
+            dir: dir.to_path_buf(),
+        };
         mem.write(slot, &params[offset..offset + n])?;
         offset += n;
     }
     Ok(())
+}
+
+pub(crate) struct StageOutput {
+    pub tensors: std::collections::HashMap<String, Vec<f32>>,
+    pub loss: Option<f32>,
+    pub counts: Vec<u32>,
+    pub prob_sum: Vec<f32>,
+    pub grads: std::collections::HashMap<usize, Vec<f32>>,
+}
+
+fn assemble(
+    names: &[String],
+    inputs: &std::collections::HashMap<String, Vec<f32>>,
+) -> Result<Vec<f32>, String> {
+    let mut acc = inputs
+        .get(&names[0])
+        .cloned()
+        .ok_or_else(|| format!("missing tensor {}", names[0]))?;
+    for name in &names[1..] {
+        let part = inputs
+            .get(name)
+            .ok_or_else(|| format!("missing tensor {name}"))?;
+        if part.len() != acc.len() {
+            return Err(format!("tensor {name} has the wrong length"));
+        }
+        for (slot, value) in acc.iter_mut().zip(part) {
+            *slot += *value;
+        }
+    }
+    Ok(acc)
+}
+
+pub(crate) fn run_stage(
+    cfg: &Config,
+    batch: &Batch,
+    stage: &Stage,
+    stages: &[Stage],
+    phase: Phase,
+    mem: &mut dyn WeightMem,
+    inputs: &std::collections::HashMap<String, Vec<f32>>,
+    aux: &[f32],
+    reserved: u64,
+    budget: u64,
+) -> Result<StageOutput, String> {
+    let spec = arch(cfg);
+    let ntok = batch.batch * batch.seq;
+    let mut tensors = std::collections::HashMap::new();
+    let mut loss = None;
+    let mut counts = Vec::new();
+    let mut prob_sum = vec![0f32; cfg.n_experts];
+    if phase == Phase::Adjoint {
+        begin_deferred_grads();
+    }
+    match (&stage.kind, phase) {
+        (StageKind::Embed, Phase::Forward) => {
+            let mut g = Graph::new();
+            let table = load(&mut g, mem, spec.embed, shape_of(&spec, spec.embed))?;
+            let y = g.embed(table, &batch.tokens, batch.batch, batch.seq);
+            tensors.insert("h.0".into(), g.value(y).to_vec());
+        }
+        (StageKind::Embed, Phase::Adjoint) => {
+            let dh = inputs.get("d.h.0").ok_or("missing d.h.0")?;
+            embed_backward(cfg, batch, &spec, mem, dh, 0.0, reserved, budget)?;
+        }
+        (StageKind::Attention(i), Phase::Forward) => {
+            let h_in = assemble(&h_parts(stages, *i, cfg.n_experts), inputs)?;
+            let mut g = Graph::new();
+            let x = g.leaf(&[batch.batch, batch.seq, cfg.dim], h_in);
+            let layer = &spec.layers[*i];
+            let aw = AttnW {
+                norm: load(
+                    &mut g,
+                    mem,
+                    layer.attn_norm,
+                    shape_of(&spec, layer.attn_norm),
+                )?,
+                q: load(&mut g, mem, layer.wq, shape_of(&spec, layer.wq))?,
+                k: load(&mut g, mem, layer.wk, shape_of(&spec, layer.wk))?,
+                v: load(&mut g, mem, layer.wv, shape_of(&spec, layer.wv))?,
+                o: load(&mut g, mem, layer.wo, shape_of(&spec, layer.wo))?,
+            };
+            let y = attention(cfg, &mut g, aw, x, batch.seq);
+            tensors.insert(format!("mid.{i}"), g.value(y).to_vec());
+        }
+        (StageKind::Attention(i), Phase::Adjoint) => {
+            let h_in = assemble(&h_parts(stages, *i, cfg.n_experts), inputs)?;
+            let mut dy = inputs
+                .get(&format!("d.mid.{i}"))
+                .cloned()
+                .ok_or("missing residual cotangent")?;
+            let extra = inputs
+                .get(&format!("d.mid.router.{i}"))
+                .ok_or("missing router cotangent")?;
+            for (slot, value) in dy.iter_mut().zip(extra) {
+                *slot += *value;
+            }
+            let dx = attn_backward(
+                cfg, batch, &spec, *i, mem, &h_in, &dy, 0.0, reserved, budget,
+            )?;
+            for name in h_parts(stages, *i, cfg.n_experts) {
+                tensors.insert(format!("d.{name}"), dx.clone());
+            }
+        }
+        (StageKind::Router(i), Phase::Forward) => {
+            let mid = inputs
+                .get(&format!("mid.{i}"))
+                .cloned()
+                .ok_or("missing mid")?;
+            let mut g = Graph::new();
+            let x = g.leaf(&[batch.batch, batch.seq, cfg.dim], mid);
+            let layer = &spec.layers[*i];
+            let norm = load(&mut g, mem, layer.ffn_norm, shape_of(&spec, layer.ffn_norm))?;
+            let gate = load(&mut g, mem, layer.gate, shape_of(&spec, layer.gate))?;
+            let route = router(cfg, &mut g, norm, gate, x);
+            let probs = g.value(route.probs).to_vec();
+            for (k, value) in probs.iter().enumerate() {
+                prob_sum[k % cfg.n_experts] += *value;
+            }
+            counts = route.counts;
+            tensors.insert(format!("flat.{i}"), g.value(route.flat).to_vec());
+            let weights = g.value(route.weights).to_vec();
+            for expert in 0..cfg.n_experts {
+                let mut column = Vec::with_capacity(ntok);
+                for n in 0..ntok {
+                    column.push(weights[n * cfg.n_experts + expert]);
+                }
+                tensors.insert(format!("wcol.{i}.{expert}"), column);
+            }
+        }
+        (StageKind::Router(i), Phase::Adjoint) => {
+            let mid = inputs
+                .get(&format!("mid.{i}"))
+                .cloned()
+                .ok_or("missing mid")?;
+            let mut d_flat = vec![0f32; ntok * cfg.dim];
+            let mut d_weights = vec![0f32; ntok * cfg.n_experts];
+            for expert in 0..cfg.n_experts {
+                let df = inputs
+                    .get(&format!("d.flat.{i}.{expert}"))
+                    .ok_or("missing expert flat cotangent")?;
+                for (slot, value) in d_flat.iter_mut().zip(df) {
+                    *slot += *value;
+                }
+                let dw = inputs
+                    .get(&format!("d.wcol.{i}.{expert}"))
+                    .ok_or("missing expert weight cotangent")?;
+                for n in 0..ntok {
+                    d_weights[n * cfg.n_experts + expert] = dw[n];
+                }
+            }
+            let zeros = vec![0f32; mid.len()];
+            let d_mid = router_backward(
+                cfg, batch, &spec, *i, mem, &mid, d_flat, d_weights, aux, &zeros, 0.0, reserved,
+                budget,
+            )?;
+            tensors.insert(format!("d.mid.router.{i}"), d_mid);
+        }
+        (StageKind::Expert { layer, expert }, Phase::Forward) => {
+            let flat = inputs
+                .get(&format!("flat.{layer}"))
+                .cloned()
+                .ok_or("missing flat")?;
+            let column = inputs
+                .get(&format!("wcol.{layer}.{expert}"))
+                .cloned()
+                .ok_or("missing weight column")?;
+            let mut g = Graph::new();
+            let flat_n = g.leaf(&[ntok, cfg.dim], flat);
+            let ws = spec.layers[*layer].experts[*expert];
+            let w1 = load(&mut g, mem, ws[0], shape_of(&spec, ws[0]))?;
+            let w3 = load(&mut g, mem, ws[1], shape_of(&spec, ws[1]))?;
+            let w2 = load(&mut g, mem, ws[2], shape_of(&spec, ws[2]))?;
+            let hidden = swiglu(&mut g, flat_n, w1, w3, w2);
+            let col = g.leaf(&[ntok, 1], column);
+            let scaled = g.mul(hidden, col);
+            tensors.insert(
+                format!("partial.{layer}.{expert}"),
+                g.value(scaled).to_vec(),
+            );
+        }
+        (StageKind::Expert { layer, expert }, Phase::Adjoint) => {
+            let flat = inputs
+                .get(&format!("flat.{layer}"))
+                .cloned()
+                .ok_or("missing flat")?;
+            let mut weights = vec![0f32; ntok * cfg.n_experts];
+            let column = inputs
+                .get(&format!("wcol.{layer}.{expert}"))
+                .ok_or("missing weight column")?;
+            for n in 0..ntok {
+                weights[n * cfg.n_experts + expert] = column[n];
+            }
+            let dy = inputs
+                .get(&format!("d.partial.{layer}.{expert}"))
+                .cloned()
+                .ok_or("missing partial cotangent")?;
+            let (df, dw) = expert_backward(
+                cfg, batch, &spec, *layer, *expert, mem, &flat, &weights, &dy, 0.0, reserved,
+                budget,
+            )?;
+            tensors.insert(format!("d.flat.{layer}.{expert}"), df);
+            tensors.insert(format!("d.wcol.{layer}.{expert}"), dw);
+        }
+        (StageKind::Layer(i), Phase::Forward) => {
+            let h_in = assemble(&h_parts(stages, *i, cfg.n_experts), inputs)?;
+            let mut g = Graph::new();
+            let x = g.leaf(&[batch.batch, batch.seq, cfg.dim], h_in);
+            let layer = &spec.layers[*i];
+            let aw = AttnW {
+                norm: load(
+                    &mut g,
+                    mem,
+                    layer.attn_norm,
+                    shape_of(&spec, layer.attn_norm),
+                )?,
+                q: load(&mut g, mem, layer.wq, shape_of(&spec, layer.wq))?,
+                k: load(&mut g, mem, layer.wk, shape_of(&spec, layer.wk))?,
+                v: load(&mut g, mem, layer.wv, shape_of(&spec, layer.wv))?,
+                o: load(&mut g, mem, layer.wo, shape_of(&spec, layer.wo))?,
+            };
+            let mid = attention(cfg, &mut g, aw, x, batch.seq);
+            let experts: Vec<[usize; 3]> = layer
+                .experts
+                .iter()
+                .map(|e| {
+                    Ok([
+                        load(&mut g, mem, e[0], shape_of(&spec, e[0]))?,
+                        load(&mut g, mem, e[1], shape_of(&spec, e[1]))?,
+                        load(&mut g, mem, e[2], shape_of(&spec, e[2]))?,
+                    ])
+                })
+                .collect::<Result<_, String>>()?;
+            let norm = load(&mut g, mem, layer.ffn_norm, shape_of(&spec, layer.ffn_norm))?;
+            let gate = load(&mut g, mem, layer.gate, shape_of(&spec, layer.gate))?;
+            let (y, probs, count) = moe(cfg, &mut g, norm, gate, &experts, mid);
+            let pv = g.value(probs).to_vec();
+            for (k, value) in pv.iter().enumerate() {
+                prob_sum[k % cfg.n_experts] += *value;
+            }
+            counts = count;
+            tensors.insert(format!("h.{}", i + 1), g.value(y).to_vec());
+        }
+        (StageKind::Layer(i), Phase::Adjoint) => {
+            let h_in = assemble(&h_parts(stages, *i, cfg.n_experts), inputs)?;
+            let dy = inputs
+                .get(&format!("d.h.{}", i + 1))
+                .cloned()
+                .ok_or("missing layer cotangent")?;
+            let dx = joint_backward(
+                cfg, batch, &spec, *i, mem, &h_in, &dy, aux, 0.0, reserved, budget,
+            )?;
+            for name in h_parts(stages, *i, cfg.n_experts) {
+                tensors.insert(format!("d.{name}"), dx.clone());
+            }
+        }
+        (StageKind::Head, Phase::Forward) => {
+            let h = assemble(&h_parts(stages, cfg.n_layers, cfg.n_experts), inputs)?;
+            let mut g = Graph::new();
+            let x = g.leaf(&[batch.batch, batch.seq, cfg.dim], h);
+            let norm = load(&mut g, mem, spec.norm, shape_of(&spec, spec.norm))?;
+            let head = load(&mut g, mem, spec.head, shape_of(&spec, spec.head))?;
+            let hidden = g.rmsnorm(x, norm, cfg.rms_norm_eps);
+            let logits = g.matmul(hidden, head);
+            let shifted = g.slice(logits, 1, 0, batch.seq - 1);
+            let pred = g.reshape(shifted, &[batch.batch * (batch.seq - 1), cfg.vocab]);
+            let mut targets = Vec::new();
+            for b in 0..batch.batch {
+                for t in 1..batch.seq {
+                    targets.push(batch.tokens[b * batch.seq + t]);
+                }
+            }
+            let ce = g.cross_entropy(pred, &targets);
+            loss = Some(g.scalar(ce));
+        }
+        (StageKind::Head, Phase::Adjoint) => {
+            let h = assemble(&h_parts(stages, cfg.n_layers, cfg.n_experts), inputs)?;
+            let dh = head_backward(cfg, batch, &spec, mem, &h, 0.0, reserved, budget)?;
+            for name in h_parts(stages, cfg.n_layers, cfg.n_experts) {
+                tensors.insert(format!("d.{name}"), dh.clone());
+            }
+        }
+    }
+    let grads = if phase == Phase::Adjoint {
+        take_deferred_grads()
+    } else {
+        std::collections::HashMap::new()
+    };
+    Ok(StageOutput {
+        tensors,
+        loss,
+        counts,
+        prob_sum,
+        grads,
+    })
 }

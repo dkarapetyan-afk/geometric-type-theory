@@ -140,7 +140,12 @@ impl Graph {
     }
 
     pub fn rmsnorm(&mut self, x: usize, w: usize, eps: f32) -> usize {
-        let v = rmsnorm_values(&self.nodes[x].value, &self.nodes[x].shape, &self.nodes[w].value, eps);
+        let v = rmsnorm_values(
+            &self.nodes[x].value,
+            &self.nodes[x].shape,
+            &self.nodes[w].value,
+            eps,
+        );
         let shape = self.nodes[x].shape.clone();
         self.push(shape, v, Op::RmsNorm { x, w, eps })
     }
@@ -170,14 +175,30 @@ impl Graph {
         let n_pos = shape[pos_axis];
         let (cos, sin) = rope_tables(n_pos, dim, theta);
         let v = rotate(&self.nodes[x].value, &shape, pos_axis, &cos, &sin, false);
-        self.push(shape, v, Op::Rope { x, pos_axis, cos, sin })
+        self.push(
+            shape,
+            v,
+            Op::Rope {
+                x,
+                pos_axis,
+                cos,
+                sin,
+            },
+        )
     }
 
     pub fn concat(&mut self, xs: &[usize], dim: usize) -> usize {
         let shapes: Vec<Vec<usize>> = xs.iter().map(|i| self.nodes[*i].shape.clone()).collect();
         let values: Vec<&[f32]> = xs.iter().map(|i| self.nodes[*i].value.as_slice()).collect();
         let (v, s) = concat_values(&values, &shapes, dim);
-        self.push(s, v, Op::Concat { xs: xs.to_vec(), dim })
+        self.push(
+            s,
+            v,
+            Op::Concat {
+                xs: xs.to_vec(),
+                dim,
+            },
+        )
     }
 
     pub fn slice(&mut self, x: usize, dim: usize, start: usize, len: usize) -> usize {
@@ -194,7 +215,14 @@ impl Graph {
     /// `axes[new] = old`.
     pub fn permute(&mut self, x: usize, axes: &[usize]) -> usize {
         let (v, s) = permute_values(&self.nodes[x].value, &self.nodes[x].shape, axes);
-        self.push(s, v, Op::Permute { x, axes: axes.to_vec() })
+        self.push(
+            s,
+            v,
+            Op::Permute {
+                x,
+                axes: axes.to_vec(),
+            },
+        )
     }
 
     /// Repeat key/value heads. Input `[B, H, T, D]` becomes `[B, H * n_rep, T, D]`,
@@ -244,7 +272,11 @@ impl Graph {
 
     pub fn cross_entropy(&mut self, logits: usize, targets: &[u32]) -> usize {
         let v = self.nodes[logits].shape[1];
-        assert_eq!(self.nodes[logits].value.len(), targets.len() * v, "ce shape");
+        assert_eq!(
+            self.nodes[logits].value.len(),
+            targets.len() * v,
+            "ce shape"
+        );
         let (loss, _) = cross_entropy(&self.nodes[logits].value, v, targets);
         self.push(
             vec![],
@@ -295,12 +327,7 @@ impl Graph {
 
     pub fn dot_const(&mut self, x: usize, c: &[f32]) -> usize {
         assert_eq!(self.nodes[x].value.len(), c.len(), "dot length");
-        let s = self.nodes[x]
-            .value
-            .iter()
-            .zip(c)
-            .map(|(a, b)| a * b)
-            .sum();
+        let s = self.nodes[x].value.iter().zip(c).map(|(a, b)| a * b).sum();
         self.push(vec![], vec![s], Op::DotConst { x, c: c.to_vec() })
     }
 
@@ -434,7 +461,12 @@ impl Graph {
                 );
                 acc(&mut self.nodes[x].grad, &g);
             }
-            Op::Rope { x, pos_axis, cos, sin } => {
+            Op::Rope {
+                x,
+                pos_axis,
+                cos,
+                sin,
+            } => {
                 let g = rotate(&grad, &self.nodes[i].shape, pos_axis, &cos, &sin, true);
                 acc(&mut self.nodes[x].grad, &g);
             }
@@ -482,7 +514,12 @@ impl Graph {
                 }
                 acc(&mut self.nodes[x].grad, &g);
             }
-            Op::Embed { table, ids, batch, seq } => {
+            Op::Embed {
+                table,
+                ids,
+                batch,
+                seq,
+            } => {
                 assert_eq!(ids.len(), batch * seq, "embed ids");
                 let dim = self.nodes[table].shape[1];
                 for (i, id) in ids.iter().enumerate() {
@@ -773,7 +810,13 @@ fn rmsnorm_values(x: &[f32], shape: &[usize], w: &[f32], eps: f32) -> Vec<f32> {
     y
 }
 
-fn rmsnorm_backward(x: &[f32], shape: &[usize], w: &[f32], dy: &[f32], eps: f32) -> (Vec<f32>, Vec<f32>) {
+fn rmsnorm_backward(
+    x: &[f32],
+    shape: &[usize],
+    w: &[f32],
+    dy: &[f32],
+    eps: f32,
+) -> (Vec<f32>, Vec<f32>) {
     let d = *shape.last().unwrap();
     let rows = x.len() / d;
     let mut dx = vec![0f32; x.len()];
@@ -873,7 +916,11 @@ fn softmax_backward(y: &[f32], shape: &[usize], dy: &[f32], window: Option<usize
     } else {
         1
     };
-    let qdim = if shape.len() >= 2 { shape[shape.len() - 2] } else { 1 };
+    let qdim = if shape.len() >= 2 {
+        shape[shape.len() - 2]
+    } else {
+        1
+    };
     let mut dx = vec![0f32; y.len()];
     match window {
         None => {
@@ -954,7 +1001,13 @@ fn concat_values(xs: &[&[f32]], shapes: &[Vec<usize>], dim: usize) -> (Vec<f32>,
     (out, shape)
 }
 
-fn slice_values(x: &[f32], shape: &[usize], dim: usize, start: usize, len: usize) -> (Vec<f32>, Vec<usize>) {
+fn slice_values(
+    x: &[f32],
+    shape: &[usize],
+    dim: usize,
+    start: usize,
+    len: usize,
+) -> (Vec<f32>, Vec<usize>) {
     let mut osh = shape.to_vec();
     osh[dim] = len;
     let mut out = vec![0f32; numel(&osh)];
@@ -970,7 +1023,14 @@ fn slice_values(x: &[f32], shape: &[usize], dim: usize, start: usize, len: usize
     (out, osh)
 }
 
-fn paste_into(dst: &mut [f32], dst_shape: &[usize], src: &[f32], dim: usize, start: usize, len: usize) {
+fn paste_into(
+    dst: &mut [f32],
+    dst_shape: &[usize],
+    src: &[f32],
+    dim: usize,
+    start: usize,
+    len: usize,
+) {
     let mut src_shape = dst_shape.to_vec();
     src_shape[dim] = len;
     for i in 0..src.len() {
@@ -1147,11 +1207,14 @@ mod tests {
         let loss = g.dot_const(flat, &[0.3, 0.0, -0.2, 0.5]);
         g.backward(loss);
         let analytic = g.grad(z)[2];
-        let numeric = fd(|h| {
-            let mut logits = logits0.clone();
-            logits[2] = h;
-            run(&logits)
-        }, logits0[2]);
+        let numeric = fd(
+            |h| {
+                let mut logits = logits0.clone();
+                logits[2] = h;
+                run(&logits)
+            },
+            logits0[2],
+        );
         assert!((analytic - numeric).abs() < 2e-3, "{analytic} vs {numeric}");
     }
 }
